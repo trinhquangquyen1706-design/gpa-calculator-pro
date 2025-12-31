@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         :root,
         .theme-light {
@@ -1124,46 +1125,4159 @@
         }
 
         // ================= PDF EXPORT =================
-        function exportPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
+        async function exportPDF() {
+            showToast('Đang tạo PDF...', 'info');
+
             const cumGPA = calcCumulativeGPA(state.semesters, state.settings.mode, state.settings.mapping);
             const rank = getGraduationRank(cumGPA.gpa10);
 
-            doc.setFontSize(20);
-            doc.setTextColor(99, 102, 241);
-            doc.text('GPA Calculator Pro - Bảng điểm', 105, 20, { align: 'center' });
+            // Create hidden HTML for PDF
+            const pdfContent = document.createElement('div');
+            pdfContent.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:Arial,sans-serif;color:black;';
 
-            doc.setFontSize(12);
-            doc.setTextColor(0, 0, 0);
-            doc.text(`Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`, 20, 35);
-            doc.text(`GPA Tích lũy (10): ${cumGPA.gpa10}  |  GPA (4): ${cumGPA.gpa4}`, 20, 42);
-            doc.text(`Xếp loại: ${rank.rank} ${rank.latin ? '(' + rank.latin + ')' : ''}`, 20, 49);
-            doc.text(`Tổng tín chỉ: ${cumGPA.totalCredits}`, 20, 56);
-
-            let yPos = 70;
+            let semestersHTML = '';
             for (const sem of state.semesters) {
                 if (!sem.includedInCum) continue;
                 const semGPA = calcSemesterGPA(sem, state.settings.mode, state.settings.mapping);
-                doc.setFontSize(14);
-                doc.setTextColor(99, 102, 241);
-                doc.text(`${sem.name} (GPA: ${semGPA.gpa10})`, 20, yPos);
-                yPos += 8;
-
-                const tableData = semGPA.courses.map(c => [c.name || '(Chưa đặt tên)', c.credits, c.valid ? c.score : '-', c.valid ? getLetter(c.score, state.settings.mapping) : '-']);
-                doc.autoTable({
-                    startY: yPos,
-                    head: [['Môn học', 'TC', 'Điểm', 'Xếp loại']],
-                    body: tableData,
-                    theme: 'striped',
-                    headStyles: { fillColor: [99, 102, 241] },
-                    margin: { left: 20, right: 20 }
-                });
-                yPos = doc.lastAutoTable.finalY + 15;
-                if (yPos > 250) { doc.addPage(); yPos = 20; }
+                semestersHTML += `
+                    <div style="margin-top:20px;">
+                        <h3 style="color:#6366f1;margin-bottom:10px;">${sem.name} (GPA: ${semGPA.gpa10})</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                            <thead><tr style="background:#6366f1;color:white;">
+                                <th style="padding:8px;border:1px solid #ddd;text-align:left;">Môn học</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:50px;">TC</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:60px;">Điểm</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:70px;">Xếp loại</th>
+                            </tr></thead>
+                            <tbody>
+                                ${semGPA.courses.map((c, i) => `
+                                    <tr style="background:${i % 2 ? '#f8f9fa' : 'white'};">
+                                        <td style="padding:8px;border:1px solid #ddd;">${c.name || '(Chưa đặt tên)'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.credits}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? c.score : '-'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? getLetter(c.score, state.settings.mapping) : '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
             }
-            doc.save(`GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
-            showToast('Đã xuất PDF thành công!', 'success');
+
+            pdfContent.innerHTML = `
+                <h1 style="color:#6366f1;text-align:center;margin-bottom:20px;">📊 GPA Calculator Pro - Bảng điểm</h1>
+                <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <p style="margin:5px 0;"><strong>Ngày xuất:</strong> ${new Date().toLocaleDateString('vi-VN')}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 10):</strong> ${cumGPA.gpa10}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 4):</strong> ${cumGPA.gpa4}</p>
+                    <p style="margin:5px 0;"><strong>Xếp loại:</strong> ${rank.rank} ${rank.latin ? '(' + rank.latin + ')' : ''}</p>
+                    <p style="margin:5px 0;"><strong>Tổng tín chỉ:</strong> ${cumGPA.totalCredits}</p>
+                </div>
+                ${semestersHTML}
+                <p style="margin-top:30px;font-size:12px;color:#666;text-align:center;">
+                    Xuất từ GPA Calculator Pro - ${new Date().toLocaleString('vi-VN')}
+                </p>
+            `;
+
+            document.body.appendChild(pdfContent);
+
+            try {
+                const canvas = await html2canvas(pdfContent, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = pdfHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                heightLeft -= pdf.internal.pageSize.getHeight();
+
+                while (heightLeft > 0) {
+                    position = heightLeft - pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                    heightLeft -= pdf.internal.pageSize.getHeight();
+                }
+
+                pdf.save(`GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                showToast('Đã xuất PDF thành công!', 'success');
+            } catch (err) {
+                console.error('PDF Error:', err);
+                showToast('Lỗi xuất PDF: ' + err.message, 'danger');
+            } finally {
+                document.body.removeChild(pdfContent);
+            }
+        }
+
+        // ================= KEYBOARD SHORTCUTS =================
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (e.key === '?' || (e.shiftKey && e.key === '/')) { showShortcutsModal(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'n') { addCourse(); e.preventDefault(); }
+            if (e.ctrlKey && e.shiftKey && e.key === 'N') { addSemester(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'e') { exportJSON(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'd') { setTheme(state.settings.theme === 'dark' ? 'light' : 'dark'); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'p') { exportPDF(); e.preventDefault(); }
+        });
+
+        function showShortcutsModal() {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">⌨️ Phím tắt</span>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="shortcuts-grid">
+              <span class="kbd">Ctrl+N</span><span>Thêm môn học mới</span>
+              <span class="kbd">Ctrl+Shift+N</span><span>Thêm học kỳ mới</span>
+              <span class="kbd">Ctrl+E</span><span>Export JSON</span>
+              <span class="kbd">Ctrl+P</span><span>Xuất PDF</span>
+              <span class="kbd">Ctrl+D</span><span>Đổi Light/Dark Mode</span>
+              <span class="kbd">?</span><span>Hiển thị bảng phím tắt</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+          </div>
+        </div>`;
+            document.body.appendChild(overlay);
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+        }
+
+        function exportJSON() {
+            const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gpa_data_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Đã xuất dữ liệu JSON!', 'success');
+        }
+
+        function importJSON(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.semesters && Array.isArray(data.semesters)) {
+                        state = { ...state, ...data };
+                        saveState();
+                        render();
+                        alert('Import thành công!');
+                    } else {
+                        alert('File không hợp lệ!');
+                    }
+                } catch (err) {
+                    alert('Lỗi đọc file: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ================= HELPERS =================
+        function genId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
+
+        function createCourse() {
+            return { id: genId(), name: '', credits: 3, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 };
+        }
+
+        function createSemester(name) {
+            return { id: genId(), name, courses: [], includedInCum: true };
+        }
+
+        function getActiveSemester() {
+            return state.semesters.find(s => s.id === state.activeSemesterId);
+        }
+
+        // ================= UI RENDER =================
+        function render() {
+            applyTheme(state.settings.theme || 'light');
+            const cumGPA = calcCumulativeGPA(state.semesters, state.settings.mode, state.settings.mapping);
+            const activeSem = getActiveSemester();
+            const semGPA = activeSem ? calcSemesterGPA(activeSem, state.settings.mode, state.settings.mapping) : null;
+            const gradRank = getGraduationRank(cumGPA.gpa10);
+
+            // Check GPA goal warning
+            if (cumGPA.totalCredits > 0 && cumGPA.gpa10 < state.settings.gpaGoal) {
+                setTimeout(() => showToast(`⚠️ GPA hiện tại (${cumGPA.gpa10}) thấp hơn mục tiêu (${state.settings.gpaGoal})`, 'warning'), 500);
+            }
+
+            document.getElementById('app').innerHTML = `
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">📊</span>
+        <span class="app-title">GPA Calculator Pro</span>
+      </div>
+      <button class="btn btn-primary" onclick="addSemester()">+ Thêm học kỳ</button>
+      <div class="semester-list">
+        ${state.semesters.map(s => `
+          <div class="semester-item ${s.id === state.activeSemesterId ? 'active' : ''}" onclick="selectSemester('${s.id}')">
+            <div>
+              <div class="name">${s.name}</div>
+              <div class="stats">${s.courses.length} môn • ${s.includedInCum ? '✓ Tích lũy' : '✗ Không tích lũy'}</div>
+            </div>
+            <div class="semester-actions" onclick="event.stopPropagation()">
+              <button onclick="toggleInclude('${s.id}')" title="Đưa vào tích lũy">${s.includedInCum ? '☑' : '☐'}</button>
+              <button onclick="renameSemester('${s.id}')" title="Đổi tên">✏</button>
+              <button onclick="duplicateSemester('${s.id}')" title="Nhân bản">📋</button>
+              <button onclick="deleteSemester('${s.id}')" title="Xóa">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+        ${state.semesters.length === 0 ? '<div class="empty-state"><div class="icon">📚</div><div>Chưa có học kỳ nào</div></div>' : ''}
+      </div>
+      <div style="border-top: 1px solid var(--border); padding-top: 12px;">
+        <button class="btn btn-secondary" style="width:100%; margin-bottom: 8px;" onclick="showSettings()">⚙ Cài đặt</button>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="exportJSON()">📥 JSON</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="exportPDF()">📄 PDF</button>
+        </div>
+        <label class="btn btn-secondary btn-sm" style="width:100%; cursor: pointer;">📤 Import<input type="file" accept=".json" style="display:none" onchange="handleImport(event)"></label>
+      </div>
+    </aside>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <h1 class="header-title">${activeSem ? activeSem.name : 'Chọn học kỳ'}</h1>
+          ${cumGPA.totalCredits > 0 ? `<span class="graduation-badge ${gradRank.class}">${gradRank.icon} ${gradRank.rank}${gradRank.latin ? ' - ' + gradRank.latin : ''}</span>` : ''}
+        </div>
+        <div class="kpi-cards">
+          ${semGPA ? `
+            <div class="kpi-card">
+              <div class="kpi-label">GPA Học kỳ (10)</div>
+              <div class="kpi-value">${semGPA.gpa10}</div>
+            </div>
+            <div class="kpi-card secondary">
+              <div class="kpi-label">GPA Học kỳ (4)</div>
+              <div class="kpi-value">${semGPA.gpa4}</div>
+            </div>
+          ` : ''}
+          <div class="kpi-card">
+            <div class="kpi-label">GPA Tích lũy (10)</div>
+            <div class="kpi-value">${cumGPA.gpa10}</div>
+          </div>
+          <div class="kpi-card secondary">
+            <div class="kpi-label">Tổng tín chỉ</div>
+            <div class="kpi-value">${cumGPA.totalCredits}</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="showShortcutsModal()" title="Phím tắt">⌨</button>
+          <button class="icon-btn" onclick="runTests()" title="Chạy tests">🧪</button>
+        </div>
+      </header>
+      <div class="tabs">
+        <button class="tab ${state.activeTab === 'courses' ? 'active' : ''}" onclick="setTab('courses')">📝 Môn học</button>
+        <button class="tab ${state.activeTab === 'stats' ? 'active' : ''}" onclick="setTab('stats')">📈 Thống kê</button>
+        <button class="tab ${state.activeTab === 'whatif' ? 'active' : ''}" onclick="setTab('whatif')">🔮 Dự báo</button>
+        <button class="tab ${state.activeTab === 'goals' ? 'active' : ''}" onclick="setTab('goals')">🎯 Mục tiêu</button>
+        <button class="tab ${state.activeTab === 'templates' ? 'active' : ''}" onclick="setTab('templates')">📋 Templates</button>
+      </div>
+      <div class="content">
+        ${renderTabContent(state.activeTab, activeSem, semGPA)}
+      </div>
+    </main>
+  `;
+            if (state.activeTab === 'stats') setTimeout(renderCharts, 100);
+        }
+
+        function renderTabContent(tab, activeSem, semGPA) {
+            switch (tab) {
+                case 'courses': return renderCoursesTab(activeSem, semGPA);
+                case 'stats': return renderStatsTab();
+                case 'whatif': return renderWhatIfTab();
+                case 'goals': return renderGoalsTab();
+                case 'templates': return renderTemplatesTab();
+                default: return renderCoursesTab(activeSem, semGPA);
+            }
+        }
+
+        function renderCoursesTab(activeSem, semGPA) {
+            if (!activeSem) {
+                return '<div class="empty-state"><div class="icon">👈</div><div>Chọn hoặc tạo học kỳ để bắt đầu</div></div>';
+            }
+            const courses = semGPA ? semGPA.courses : activeSem.courses.map(c => ({ ...c, valid: true, score: 0 }));
+            return `
+    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="badge ${state.settings.mode === 'STRICT' ? 'badge-warning' : 'badge-success'}">${state.settings.mode === 'STRICT' ? '⚠ Strict' : '✓ Auto-Normalize'}</span>
+      </div>
+      <button class="btn btn-primary" onclick="addCourse()">+ Thêm môn học</button>
+    </div>
+    <div class="course-table-wrapper">
+      <table class="course-table">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Tên môn</th>
+            <th style="width:60px">TC</th>
+            <th style="width:60px">BTL</th>
+            <th style="width:60px">Quiz</th>
+            <th style="width:60px">GK</th>
+            <th style="width:60px">CK</th>
+            <th style="width:60px">%BTL</th>
+            <th style="width:60px">%Quiz</th>
+            <th style="width:60px">%GK</th>
+            <th style="width:60px">%CK</th>
+            <th style="width:100px">Template</th>
+            <th style="width:80px">Điểm</th>
+            <th style="width:50px">Xếp</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${courses.map((c, i) => `
+            <tr>
+              <td style="text-align:center">${i + 1}</td>
+              <td><input type="text" class="input-name" value="${c.name}" onchange="updateCourse('${c.id}','name',this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.credits}" min="1" onchange="updateCourse('${c.id}','credits',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.btl}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','btl',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.quiz}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','quiz',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.gk}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','gk',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.ck}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','ck',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wBTL}" min="0" max="100" onchange="updateCourse('${c.id}','wBTL',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wQuiz}" min="0" max="100" onchange="updateCourse('${c.id}','wQuiz',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wGK}" min="0" max="100" onchange="updateCourse('${c.id}','wGK',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wCK}" min="0" max="100" onchange="updateCourse('${c.id}','wCK',+this.value)"></td>
+              <td>
+                <select onchange="applyTemplate('${c.id}', this.value)">
+                  <option value="">-- Chọn --</option>
+                  ${WEIGHT_TEMPLATES.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}
+                </select>
+              </td>
+              <td class="score-cell ${c.valid ? (c.score >= 8 ? 'high' : c.score >= 5 ? 'medium' : 'low') : ''}">
+                ${c.valid ? c.score : '-'}
+                ${c.normalized ? '<span class="badge badge-warning" title="Đã chuẩn hóa">~</span>' : ''}
+                ${!c.valid ? `<span class="badge badge-danger" title="${c.msg}">!</span>` : ''}
+              </td>
+              <td>${c.valid ? getLetter(c.score, state.settings.mapping) : '-'}</td>
+              <td><span class="delete-btn" onclick="deleteCourse('${c.id}')">🗑</span></td>
+            </tr>
+          `).join('')}
+          ${courses.length === 0 ? '<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-secondary)">Chưa có môn học nào. Nhấn "+ Thêm môn học" để bắt đầu.</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+        }
+
+        function renderGoalsTab() {
+            return `
+    <div class="goal-panel">
+      <div class="goal-section">
+        <div class="goal-title">🎯 Mục tiêu GPA Tích lũy</div>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">Tính GPA học kỳ cần đạt để đạt mục tiêu GPA tích lũy.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">GPA mục tiêu (thang 10)</label>
+            <input type="number" class="form-input" id="goal-cum-target" value="8.0" min="0" max="10" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Học kỳ đang học</label>
+            <select class="form-input" id="goal-cum-current">
+              ${state.semesters.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="calcGoalCumulative()">Tính toán</button>
+        <div id="goal-cum-result" class="result-box" style="display:none;"></div>
+      </div>
+
+      <div class="goal-section">
+        <div class="goal-title">📊 Mục tiêu cho 1 thành phần điểm</div>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">Tính điểm cần đạt cho một thành phần (BTL/Quiz/GK/CK) để đạt điểm môn mong muốn.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Học kỳ</label>
+            <select class="form-input" id="goal-comp-sem" onchange="updateGoalCourseSelect()">
+              ${state.semesters.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Môn học</label>
+            <select class="form-input" id="goal-comp-course"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Thành phần cần tính</label>
+            <select class="form-input" id="goal-comp-component">
+              <option value="ck">Cuối kỳ (CK)</option>
+              <option value="gk">Giữa kỳ (GK)</option>
+              <option value="quiz">Quiz</option>
+              <option value="btl">BTL</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Điểm môn mục tiêu</label>
+            <input type="number" class="form-input" id="goal-comp-target" value="8.0" min="0" max="10" step="0.1">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="calcGoalComponent()">Tính toán</button>
+        <div id="goal-comp-result" class="result-box" style="display:none;"></div>
+      </div>
+    </div>
+  `;
+        }
+
+        // ================= STATS TAB =================
+        function renderStatsTab() {
+            const history = getSemesterGPAHistory(state.semesters, state.settings.mode, state.settings.mapping);
+            const dist = getGradeDistribution(state.semesters, state.settings.mode, state.settings.mapping);
+            return `
+    <div class="chart-grid">
+      <div class="chart-container">
+        <div class="chart-title">📈 Xu hướng GPA qua các học kỳ</div>
+        <canvas id="gpaLineChart" height="200"></canvas>
+        ${history.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;">Chưa có dữ liệu học kỳ</p>' : ''}
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">🥧 Phân bố xếp loại điểm</div>
+        <canvas id="gradePieChart" height="200"></canvas>
+      </div>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">📊 Tổng quan theo học kỳ</div>
+      <table class="course-table">
+        <thead><tr><th>Học kỳ</th><th>GPA (10)</th><th>GPA (4)</th><th>Xếp loại</th></tr></thead>
+        <tbody>
+          ${history.map(h => {
+                const rank = getGraduationRank(h.gpa10);
+                return `<tr><td>${h.name}</td><td>${h.gpa10}</td><td>${h.gpa4}</td><td><span class="graduation-badge ${rank.class}" style="font-size:11px;padding:4px 8px;">${rank.icon} ${rank.rank}</span></td></tr>`;
+            }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+        }
+
+        function renderCharts() {
+            const history = getSemesterGPAHistory(state.semesters, state.settings.mode, state.settings.mapping);
+            const dist = getGradeDistribution(state.semesters, state.settings.mode, state.settings.mapping);
+
+            const lineCtx = document.getElementById('gpaLineChart')?.getContext('2d');
+            if (lineCtx && history.length > 0) {
+                new Chart(lineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: history.map(h => h.name),
+                        datasets: [{
+                            label: 'GPA (10)',
+                            data: history.map(h => h.gpa10),
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: { responsive: true, scales: { y: { min: 0, max: 10 } } }
+                });
+            }
+
+            const pieCtx = document.getElementById('gradePieChart')?.getContext('2d');
+            if (pieCtx) {
+                const colors = ['#a855f7', '#6366f1', '#22c55e', '#3b82f6', '#06b6d4', '#f59e0b', '#eab308', '#f97316', '#ef4444'];
+                new Chart(pieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(dist),
+                        datasets: [{ data: Object.values(dist), backgroundColor: colors }]
+                    },
+                    options: { responsive: true }
+                });
+            }
+        }
+
+        // ================= WHAT-IF TAB =================
+        function renderWhatIfTab() {
+            const activeSem = getActiveSemester();
+            if (!activeSem) return '<div class="empty-state"><div class="icon">🔮</div><div>Chọn học kỳ để sử dụng Dự báo</div></div>';
+
+            return `
+    <div class="goal-panel">
+      <div class="goal-title">🔮 Dự báo điểm (What-If Analysis)</div>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Nhập điểm dự kiến cho các thành phần chưa có để xem GPA dự kiến.</p>
+      <div class="course-table-wrapper">
+        <table class="course-table">
+          <thead><tr><th>Môn học</th><th>TC</th><th>BTL</th><th>Quiz</th><th>GK</th><th>CK (Dự kiến)</th><th>Điểm dự kiến</th></tr></thead>
+          <tbody>
+            ${activeSem.courses.map(c => {
+                const whatIfCK = state.whatIfData[c.id] ?? c.ck;
+                const tempCourse = { ...c, ck: whatIfCK };
+                const res = calcCourseScore(tempCourse, state.settings.mode);
+                return `<tr>
+                <td>${c.name || '(Chưa đặt tên)'}</td>
+                <td>${c.credits}</td>
+                <td>${c.btl}</td>
+                <td>${c.quiz}</td>
+                <td>${c.gk}</td>
+                <td><input type="number" class="input-sm whatif-input" value="${whatIfCK}" min="0" max="10" step="0.1" onchange="updateWhatIf('${c.id}', +this.value)"></td>
+                <td class="score-cell ${res.valid ? (res.score >= 8 ? 'high' : res.score >= 5 ? 'medium' : 'low') : ''}">${res.valid ? res.score : '-'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="result-box" style="margin-top:16px;">
+        <div class="result-label">GPA Dự kiến học kỳ này:</div>
+        <div class="result-value">${calcWhatIfGPA()}</div>
+      </div>
+    </div>
+  `;
+        }
+
+        function updateWhatIf(courseId, value) {
+            state.whatIfData[courseId] = value;
+            render();
+        }
+
+        function calcWhatIfGPA() {
+            const activeSem = getActiveSemester();
+            if (!activeSem) return 0;
+            let total = 0, weighted = 0;
+            for (const c of activeSem.courses) {
+                const whatIfCK = state.whatIfData[c.id] ?? c.ck;
+                const tempCourse = { ...c, ck: whatIfCK };
+                const res = calcCourseScore(tempCourse, state.settings.mode);
+                if (res.valid && c.credits > 0) { total += c.credits; weighted += res.score * c.credits; }
+            }
+            return total > 0 ? (weighted / total).toFixed(2) : 0;
+        }
+
+        // ================= TEMPLATES TAB =================
+        function renderTemplatesTab() {
+            const templates = state.settings.courseTemplates || [];
+            return `
+    <div class="goal-panel">
+      <div class="goal-title">📋 Quản lý Template Môn học</div>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Lưu các môn học thường dùng để thêm nhanh vào học kỳ.</p>
+      <button class="btn btn-primary" onclick="saveCurrentCourseAsTemplate()" style="margin-bottom:16px;">+ Lưu môn học hiện tại</button>
+      <div class="template-list">
+        ${templates.length === 0 ? '<p style="color:var(--text-secondary);">Chưa có template nào. Thêm môn học vào học kỳ rồi lưu làm template.</p>' : ''}
+        ${templates.map((t, i) => `
+          <div class="template-item">
+            <div>
+              <strong>${t.name || '(Chưa đặt tên)'}</strong>
+              <div style="font-size:12px;color:var(--text-secondary);">${t.credits} TC • BTL:${t.wBTL}% Quiz:${t.wQuiz}% GK:${t.wGK}% CK:${t.wCK}%</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm btn-secondary" onclick="addCourseFromTemplate(${i})">➕ Thêm</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteTemplate(${i})">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+        }
+
+        function saveCurrentCourseAsTemplate() {
+            const activeSem = getActiveSemester();
+            if (!activeSem || activeSem.courses.length === 0) { showToast('Chưa có môn học để lưu!', 'warning'); return; }
+            const lastCourse = activeSem.courses[activeSem.courses.length - 1];
+            if (!state.settings.courseTemplates) state.settings.courseTemplates = [];
+            state.settings.courseTemplates.push({ ...lastCourse, id: undefined });
+            saveState();
+            render();
+            showToast('Đã lưu template!', 'success');
+        }
+
+        function addCourseFromTemplate(idx) {
+            const activeSem = getActiveSemester();
+            if (!activeSem) { showToast('Chọn học kỳ trước!', 'warning'); return; }
+            const template = state.settings.courseTemplates[idx];
+            activeSem.courses.push({ ...template, id: genId() });
+            saveState();
+            setTab('courses');
+            showToast('Đã thêm môn từ template!', 'success');
+        }
+
+        function deleteTemplate(idx) {
+            state.settings.courseTemplates.splice(idx, 1);
+            saveState();
+            render();
+            showToast('Đã xóa template!', 'info');
+        }
+
+        // ================= EVENT HANDLERS =================
+        function addSemester() {
+            const name = prompt('Tên học kỳ:', `Học kỳ ${state.semesters.length + 1}`);
+            if (name) {
+                const sem = createSemester(name);
+                state.semesters.push(sem);
+                state.activeSemesterId = sem.id;
+                saveState();
+                render();
+            }
+        }
+
+        function selectSemester(id) {
+            state.activeSemesterId = id;
+            render();
+        }
+
+        function renameSemester(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            const name = prompt('Tên mới:', sem.name);
+            if (name) {
+                sem.name = name;
+                saveState();
+                render();
+            }
+        }
+
+        function deleteSemester(id) {
+            if (confirm('Xóa học kỳ này?')) {
+                state.semesters = state.semesters.filter(s => s.id !== id);
+                if (state.activeSemesterId === id) state.activeSemesterId = state.semesters[0]?.id || null;
+                saveState();
+                render();
+            }
+        }
+
+        function duplicateSemester(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            const newSem = createSemester(sem.name + ' (copy)');
+            newSem.courses = sem.courses.map(c => ({ ...c, id: genId() }));
+            state.semesters.push(newSem);
+            saveState();
+            render();
+        }
+
+        function toggleInclude(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            sem.includedInCum = !sem.includedInCum;
+            saveState();
+            render();
+        }
+
+        function addCourse() {
+            const sem = getActiveSemester();
+            if (sem) {
+                sem.courses.push(createCourse());
+                saveState();
+                render();
+            }
+        }
+
+        function updateCourse(id, field, value) {
+            const sem = getActiveSemester();
+            const course = sem.courses.find(c => c.id === id);
+            if (course) {
+                course[field] = value;
+                saveState();
+                render();
+            }
+        }
+
+        function deleteCourse(id) {
+            const sem = getActiveSemester();
+            sem.courses = sem.courses.filter(c => c.id !== id);
+            saveState();
+            render();
+        }
+
+        function applyTemplate(courseId, templateIdx) {
+            if (templateIdx === '') return;
+            const t = WEIGHT_TEMPLATES[+templateIdx];
+            const sem = getActiveSemester();
+            const course = sem.courses.find(c => c.id === courseId);
+            if (course && t) {
+                course.wBTL = t.wBTL;
+                course.wQuiz = t.wQuiz;
+                course.wGK = t.wGK;
+                course.wCK = t.wCK;
+                saveState();
+                render();
+            }
+        }
+
+        function setTab(tab) {
+            state.activeTab = tab;
+            render();
+            if (tab === 'goals') setTimeout(updateGoalCourseSelect, 0);
+        }
+
+        function toggleDarkMode() {
+            state.settings.darkMode = !state.settings.darkMode;
+            saveState();
+            render();
+        }
+
+        function handleImport(e) {
+            const file = e.target.files[0];
+            if (file) importJSON(file);
+        }
+
+        function updateGoalCourseSelect() {
+            const semId = document.getElementById('goal-comp-sem')?.value;
+            const sem = state.semesters.find(s => s.id === semId);
+            const select = document.getElementById('goal-comp-course');
+            if (select && sem) {
+                select.innerHTML = sem.courses.map(c => `<option value="${c.id}">${c.name || '(Chưa đặt tên)'}</option>`).join('');
+            }
+        }
+
+        function calcGoalCumulative() {
+            const target = +document.getElementById('goal-cum-target').value;
+            const currentId = document.getElementById('goal-cum-current').value;
+            const currentSem = state.semesters.find(s => s.id === currentId);
+            const doneSems = state.semesters.filter(s => s.id !== currentId && s.includedInCum);
+            const result = goalSeekSemesterGPA(target, currentSem, doneSems, state.settings.mode, state.settings.mapping);
+            const div = document.getElementById('goal-cum-result');
+            div.style.display = 'block';
+            if (result.possible) {
+                div.innerHTML = `
+      <div class="result-value">${result.required}</div>
+      <div class="result-label">GPA học kỳ cần đạt (thang 10)</div>
+      <p style="margin-top:12px;color:var(--text-secondary);font-size:13px;">
+        Tín chỉ đã tích lũy: ${result.cumCredits} • Tín chỉ học kỳ này: ${result.semCredits}
+      </p>
+    `;
+            } else {
+                div.innerHTML = `<span class="badge badge-danger">${result.msg}</span> ${result.required !== undefined ? `(Cần: ${result.required.toFixed(2)})` : ''}`;
+            }
+        }
+
+        function calcGoalComponent() {
+            const semId = document.getElementById('goal-comp-sem').value;
+            const courseId = document.getElementById('goal-comp-course').value;
+            const component = document.getElementById('goal-comp-component').value;
+            const target = +document.getElementById('goal-comp-target').value;
+            const sem = state.semesters.find(s => s.id === semId);
+            const course = sem?.courses.find(c => c.id === courseId);
+            if (!course) {
+                alert('Vui lòng chọn môn học');
+                return;
+            }
+            const result = goalSeekComponent(course, target, component, state.settings.mode);
+            const div = document.getElementById('goal-comp-result');
+            div.style.display = 'block';
+            const labels = { ck: 'Cuối kỳ', gk: 'Giữa kỳ', quiz: 'Quiz', btl: 'BTL' };
+            if (result.possible) {
+                div.innerHTML = `
+      <div class="result-value">${result.required}</div>
+      <div class="result-label">Điểm ${labels[component]} cần đạt</div>
+    `;
+            } else {
+                div.innerHTML = `<span class="badge badge-danger">${result.msg}</span> ${result.required !== undefined ? `(Cần: ${result.required.toFixed(2)})` : ''}`;
+            }
+        }
+
+        function showSettings() {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">⚙ Cài đặt</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <div class="settings-title">🎨 Theme</div>
+          <div class="theme-picker">
+            <button class="theme-btn ${state.settings.theme === 'light' ? 'active' : ''}" data-theme="light" onclick="setTheme('light')" title="Light"></button>
+            <button class="theme-btn ${state.settings.theme === 'dark' ? 'active' : ''}" data-theme="dark" onclick="setTheme('dark')" title="Dark"></button>
+            <button class="theme-btn ${state.settings.theme === 'ocean' ? 'active' : ''}" data-theme="ocean" onclick="setTheme('ocean')" title="Ocean"></button>
+            <button class="theme-btn ${state.settings.theme === 'forest' ? 'active' : ''}" data-theme="forest" onclick="setTheme('forest')" title="Forest"></button>
+            <button class="theme-btn ${state.settings.theme === 'sunset' ? 'active' : ''}" data-theme="sunset" onclick="setTheme('sunset')" title="Sunset"></button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">🎯 Mục tiêu GPA</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <input type="number" class="form-input" style="width:100px;" value="${state.settings.gpaGoal}" min="0" max="10" step="0.1" onchange="updateGPAGoal(+this.value)">
+            <span style="color:var(--text-secondary);">Cảnh báo khi GPA thấp hơn mục tiêu</span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">📐 Chế độ tính điểm</div>
+          <div class="toggle-container">
+            <button class="toggle-btn ${state.settings.mode === 'STRICT' ? 'active' : ''}" onclick="setMode('STRICT')">STRICT (Tổng % = 100)</button>
+            <button class="toggle-btn ${state.settings.mode === 'AUTO-NORMALIZE' ? 'active' : ''}" onclick="setMode('AUTO-NORMALIZE')">AUTO-NORMALIZE</button>
+          </div>
+          <p style="margin-top:8px;font-size:13px;color:var(--text-secondary);">
+            ${state.settings.mode === 'STRICT' ? 'Môn có tổng % ≠ 100 sẽ không được tính vào GPA.' : 'Tự động chuẩn hóa trọng số nếu tổng ≠ 100.'}
+          </p>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">📊 Bảng quy đổi GPA thang 4</div>
+          <table class="mapping-table">
+            <thead>
+              <tr><th>Từ</th><th>Đến</th><th>Xếp loại</th><th>GPA 4</th></tr>
+            </thead>
+            <tbody>
+              ${state.settings.mapping.map((m, i) => `
+                <tr>
+                  <td><input type="number" value="${m.min}" step="0.1" onchange="updateMapping(${i},'min',+this.value)"></td>
+                  <td><input type="number" value="${m.max}" step="0.1" onchange="updateMapping(${i},'max',+this.value)"></td>
+                  <td><input type="text" value="${m.letter}" maxlength="2" onchange="updateMapping(${i},'letter',this.value)"></td>
+                  <td><input type="number" value="${m.gp4}" step="0.1" onchange="updateMapping(${i},'gp4',+this.value)"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="resetMapping()">Đặt lại mặc định</button>
+        <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+      </div>
+    </div>
+  `;
+            document.body.appendChild(overlay);
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+        }
+
+        function closeModal() {
+            document.querySelector('.modal-overlay')?.remove();
+        }
+
+        function setMode(mode) {
+            state.settings.mode = mode;
+            saveState();
+            closeModal();
+            render();
+            showSettings();
+        }
+
+        function updateMapping(idx, field, value) {
+            state.settings.mapping[idx][field] = value;
+            saveState();
+        }
+
+        function resetMapping() {
+            state.settings.mapping = [...DEFAULT_MAPPING];
+            saveState();
+            closeModal();
+            showSettings();
+        }
+
+        function updateGPAGoal(value) {
+            state.settings.gpaGoal = value;
+            saveState();
+            showToast(`Mục tiêu GPA đã được đặt thành ${value}`, 'success');
+        }
+
+        // ================= TESTS =================
+        function runTests() {
+            const results = [];
+            const pass = (name) => results.push({ name, pass: true });
+            const fail = (name, exp, got) => results.push({ name, pass: false, exp, got });
+
+            // TV1: STRICT course score = 7.0
+            const c1 = { btl: 8, quiz: 9, gk: 7, ck: 6, wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 };
+            const r1 = calcCourseScore(c1, 'STRICT');
+            r1.score === 7 ? pass('TV1: STRICT score=7.0') : fail('TV1', 7, r1.score);
+
+            // TV2: GPA semester = 7.8
+            const sem2 = { courses: [{ credits: 3, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100, _score: 7 }, { credits: 2, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100, _score: 9 }] };
+            sem2.courses[0].ck = 7; sem2.courses[1].ck = 9;
+            const r2 = calcSemesterGPA(sem2, 'STRICT', DEFAULT_MAPPING);
+            r2.gpa10 === 7.8 ? pass('TV2: Semester GPA=7.8') : fail('TV2', 7.8, r2.gpa10);
+
+            // TV3: AUTO-NORMALIZE = 6.75
+            const c3 = { btl: 8, quiz: 9, gk: 7, ck: 6, wBTL: 0, wQuiz: 10, wGK: 30, wCK: 40 };
+            const r3 = calcCourseScore(c3, 'AUTO-NORMALIZE');
+            r3.score === 6.75 ? pass('TV3: AUTO-NORMALIZE=6.75') : fail('TV3', 6.75, r3.score);
+
+            // TV4: Goal seek CK = 8.67
+            const c4 = { btl: 0, quiz: 0, gk: 7, ck: 0, wBTL: 0, wQuiz: 0, wGK: 40, wCK: 60 };
+            const r4 = goalSeekComponent(c4, 8, 'ck', 'STRICT');
+            Math.abs(r4.required - 8.67) < 0.01 ? pass('TV4: Goal CK=8.67') : fail('TV4', 8.67, r4.required);
+
+            // TV5: Required semester GPA = 8.4
+            const doneSems = [{ courses: [{ credits: 30, btl: 0, quiz: 0, gk: 0, ck: 7.5, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100 }] }];
+            const currSem = { courses: [{ credits: 15, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 100, wQuiz: 0, wGK: 0, wCK: 0 }] };
+            const r5 = goalSeekSemesterGPA(7.8, currSem, doneSems, 'STRICT', DEFAULT_MAPPING);
+            r5.required === 8.4 ? pass('TV5: Required GPA=8.4') : fail('TV5', 8.4, r5.required);
+
+            // Show results
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">🧪 Kết quả Tests</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="test-results">
+${results.map(r => r.pass
+                ? `<div class="test-pass">✓ ${r.name}</div>`
+                : `<div class="test-fail">✗ ${r.name}\n  Expected: ${r.exp}, Got: ${r.got}</div>`
+            ).join('\n')}
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--bg-tertiary);border-radius:8px;">
+          <strong>${results.filter(r => r.pass).length}/${results.length}</strong> tests passed
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+      </div>
+    </div>
+  `;
+            document.body.appendChild(overlay);
+        }
+
+        // ================= INIT =================
+        loadState();
+        render();
+    </script>
+</body>
+
+</html>,<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPA Calculator Pro</title>
+    <meta name="description" content="Ứng dụng tính GPA đa học kỳ với Goal Seeking">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root,
+        .theme-light {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f1f5f9;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --radius: 12px;
+        }
+
+        .dark,
+        .theme-dark {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #475569;
+        }
+
+        .theme-ocean {
+            --bg-primary: #0c1929;
+            --bg-secondary: #0f2942;
+            --bg-tertiary: #1a3a5c;
+            --text-primary: #e0f2fe;
+            --text-secondary: #7dd3fc;
+            --accent: #0ea5e9;
+            --accent-hover: #0284c7;
+            --border: #1e4976;
+        }
+
+        .theme-forest {
+            --bg-primary: #0f1f14;
+            --bg-secondary: #162b1c;
+            --bg-tertiary: #1f3d26;
+            --text-primary: #dcfce7;
+            --text-secondary: #86efac;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --border: #2d5a37;
+        }
+
+        .theme-sunset {
+            --bg-primary: #1f1315;
+            --bg-secondary: #2d1b1e;
+            --bg-tertiary: #3d2428;
+            --text-primary: #fef2f2;
+            --text-secondary: #fca5a5;
+            --accent: #f97316;
+            --accent-hover: #ea580c;
+            --border: #5c3a3e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: all 0.3s;
+        }
+
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 24px;
+        }
+
+        .app-title {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .semester-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .semester-item {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .semester-item:hover {
+            background: var(--bg-primary);
+        }
+
+        .semester-item.active {
+            border-color: var(--accent);
+            background: var(--bg-primary);
+        }
+
+        .semester-item .name {
+            font-weight: 500;
+        }
+
+        .semester-item .stats {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .semester-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .semester-actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .semester-actions button:hover {
+            background: var(--border);
+            color: var(--text-primary);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .kpi-cards {
+            display: flex;
+            gap: 16px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            color: white;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .kpi-card.secondary {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: none;
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--border);
+            transform: scale(1.05);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .course-table-wrapper {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .course-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .course-table th,
+        .course-table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .course-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            position: sticky;
+            top: 0;
+        }
+
+        .course-table td {
+            font-size: 14px;
+        }
+
+        .course-table tr:hover td {
+            background: var(--bg-tertiary);
+        }
+
+        .course-table input,
+        .course-table select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .course-table input:focus,
+        .course-table select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .course-table input.invalid {
+            border-color: var(--danger);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .input-sm {
+            width: 60px !important;
+            text-align: center;
+        }
+
+        .input-name {
+            min-width: 150px;
+        }
+
+        .score-cell {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .score-cell.high {
+            color: var(--success);
+        }
+
+        .score-cell.medium {
+            color: var(--warning);
+        }
+
+        .score-cell.low {
+            color: var(--danger);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .delete-btn {
+            color: var(--danger);
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .delete-btn:hover {
+            opacity: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+        }
+
+        .goal-panel {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .goal-section {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .goal-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .goal-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-box {
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+
+        .result-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .result-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .test-results {
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        .test-pass {
+            color: var(--success);
+        }
+
+        .test-fail {
+            color: var(--danger);
+        }
+
+        .settings-section {
+            margin-bottom: 24px;
+        }
+
+        .settings-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .mapping-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .mapping-table th,
+        .mapping-table td {
+            padding: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .mapping-table input {
+            width: 60px;
+            text-align: center;
+            padding: 4px;
+        }
+
+        .toggle-container {
+            display: flex;
+            gap: 8px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .toggle-btn:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .toggle-btn:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+
+        .toggle-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .include-toggle {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .app {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 200px;
+            }
+
+            .kpi-cards {
+                flex-wrap: wrap;
+            }
+
+            .form-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            padding: 14px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast-success {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .toast-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .toast-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .toast-info {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Charts */
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Graduation Badge */
+        .graduation-badge {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: #1e293b;
+            font-weight: 700;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .graduation-badge.excellent {
+            background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .graduation-badge.good {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+        }
+
+        .graduation-badge.fair {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        /* Theme Picker */
+        .theme-picker {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .theme-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .theme-btn.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--bg-secondary);
+        }
+
+        .theme-btn[data-theme="light"] {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+        }
+
+        .theme-btn[data-theme="dark"] {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+        }
+
+        .theme-btn[data-theme="ocean"] {
+            background: linear-gradient(135deg, #0ea5e9, #0c1929);
+        }
+
+        .theme-btn[data-theme="forest"] {
+            background: linear-gradient(135deg, #22c55e, #0f1f14);
+        }
+
+        .theme-btn[data-theme="sunset"] {
+            background: linear-gradient(135deg, #f97316, #1f1315);
+        }
+
+        /* Keyboard Shortcuts */
+        .kbd {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .shortcuts-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 16px;
+            align-items: center;
+        }
+
+        /* Course Template */
+        .template-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .template-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+
+        .template-item:hover {
+            background: var(--border);
+        }
+
+        /* What-If Table */
+        .whatif-input {
+            background: rgba(99, 102, 241, 0.1) !important;
+            border-color: var(--accent) !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app" id="app"></div>
+
+    <script>
+        // ================= CORE DATA =================
+        const DEFAULT_MAPPING = [
+            { min: 9.5, max: 10, letter: 'A+', gp4: 4.0 },
+            { min: 8.5, max: 9.4, letter: 'A', gp4: 4.0 },
+            { min: 8.0, max: 8.4, letter: 'B+', gp4: 3.5 },
+            { min: 7.0, max: 7.9, letter: 'B', gp4: 3.0 },
+            { min: 6.5, max: 6.9, letter: 'C+', gp4: 2.5 },
+            { min: 5.5, max: 6.4, letter: 'C', gp4: 2.0 },
+            { min: 5.0, max: 5.4, letter: 'D+', gp4: 1.5 },
+            { min: 4.0, max: 4.9, letter: 'D', gp4: 1.0 },
+            { min: 0, max: 3.9, letter: 'F', gp4: 0.0 }
+        ];
+
+        const WEIGHT_TEMPLATES = [
+            { name: 'Mặc định (20/10/30/40)', wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 },
+            { name: 'Không BTL (0/10/30/60)', wBTL: 0, wQuiz: 10, wGK: 30, wCK: 60 },
+            { name: 'Không Quiz (20/0/30/50)', wBTL: 20, wQuiz: 0, wGK: 30, wCK: 50 },
+            { name: 'Chỉ GK+CK (0/0/40/60)', wBTL: 0, wQuiz: 0, wGK: 40, wCK: 60 }
+        ];
+
+        let state = {
+            semesters: [],
+            activeSemesterId: null,
+            activeTab: 'courses',
+            settings: {
+                mode: 'STRICT',
+                mapping: [...DEFAULT_MAPPING],
+                darkMode: false,
+                theme: 'light',
+                gpaGoal: 8.0,
+                courseTemplates: []
+            },
+            whatIfData: {}
+        };
+
+        // ================= GRADUATION RANKING =================
+        function getGraduationRank(gpa10) {
+            if (gpa10 >= 9.0) return { rank: 'Xuất sắc', latin: 'Summa Cum Laude', class: 'excellent', icon: '🏆' };
+            if (gpa10 >= 8.0) return { rank: 'Giỏi', latin: 'Magna Cum Laude', class: 'good', icon: '🥇' };
+            if (gpa10 >= 7.0) return { rank: 'Khá', latin: 'Cum Laude', class: 'fair', icon: '🥈' };
+            if (gpa10 >= 5.0) return { rank: 'Trung bình', latin: '', class: '', icon: '📜' };
+            return { rank: 'Yếu', latin: '', class: '', icon: '⚠️' };
+        }
+
+        // ================= TOAST NOTIFICATIONS =================
+        function showToast(message, type = 'info') {
+            let container = document.querySelector('.toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ================= GRADE DISTRIBUTION =================
+        function getGradeDistribution(semesters, mode, mapping) {
+            const dist = { 'A+': 0, 'A': 0, 'B+': 0, 'B': 0, 'C+': 0, 'C': 0, 'D+': 0, 'D': 0, 'F': 0 };
+            for (const sem of semesters) {
+                if (!sem.includedInCum) continue;
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid) dist[getLetter(res.score, mapping)]++;
+                }
+            }
+            return dist;
+        }
+
+        // ================= SEMESTER GPA HISTORY =================
+        function getSemesterGPAHistory(semesters, mode, mapping) {
+            return semesters.filter(s => s.includedInCum).map(sem => {
+                const res = calcSemesterGPA(sem, mode, mapping);
+                return { name: sem.name, gpa10: res.gpa10, gpa4: res.gpa4 };
+            });
+        }
+
+        // ================= CORE CALCULATIONS =================
+        function calcCourseScore(c, mode) {
+            const sumW = c.wBTL + c.wQuiz + c.wGK + c.wCK;
+            if (mode === 'STRICT' && Math.abs(sumW - 100) > 0.01) return { valid: false, score: 0, msg: 'Tổng % ≠ 100' };
+            if (sumW === 0) return { valid: false, score: 0, msg: 'Tổng % = 0' };
+            const raw = c.btl * c.wBTL + c.quiz * c.wQuiz + c.gk * c.wGK + c.ck * c.wCK;
+            const score = mode === 'STRICT' ? raw / 100 : raw / sumW;
+            return { valid: true, score: Math.round(score * 100) / 100, normalized: sumW !== 100, sumW };
+        }
+
+        function getGP4(score10, mapping) {
+            for (const m of mapping) {
+                if (score10 >= m.min && score10 <= m.max) return m.gp4;
+            }
+            return 0;
+        }
+
+        function getLetter(score10, mapping) {
+            for (const m of mapping) {
+                if (score10 >= m.min && score10 <= m.max) return m.letter;
+            }
+            return 'F';
+        }
+
+        function calcSemesterGPA(sem, mode, mapping) {
+            let totalCredits = 0, weighted10 = 0, weighted4 = 0;
+            const courses = [];
+            for (const c of sem.courses) {
+                const res = calcCourseScore(c, mode);
+                courses.push({ ...c, ...res });
+                if (res.valid && c.credits > 0) {
+                    totalCredits += c.credits;
+                    weighted10 += res.score * c.credits;
+                    weighted4 += getGP4(res.score, mapping) * c.credits;
+                }
+            }
+            const gpa10 = totalCredits > 0 ? Math.round((weighted10 / totalCredits) * 100) / 100 : 0;
+            const gpa4 = totalCredits > 0 ? Math.round((weighted4 / totalCredits) * 100) / 100 : 0;
+            return { gpa10, gpa4, totalCredits, courses };
+        }
+
+        function calcCumulativeGPA(semesters, mode, mapping) {
+            let totalCredits = 0, weighted10 = 0, weighted4 = 0;
+            for (const sem of semesters) {
+                if (!sem.includedInCum) continue;
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid && c.credits > 0) {
+                        totalCredits += c.credits;
+                        weighted10 += res.score * c.credits;
+                        weighted4 += getGP4(res.score, mapping) * c.credits;
+                    }
+                }
+            }
+            const gpa10 = totalCredits > 0 ? Math.round((weighted10 / totalCredits) * 100) / 100 : 0;
+            const gpa4 = totalCredits > 0 ? Math.round((weighted4 / totalCredits) * 100) / 100 : 0;
+            return { gpa10, gpa4, totalCredits };
+        }
+
+        // ================= GOAL SEEKING =================
+        function goalSeekComponent(c, targetScore, component, mode) {
+            const sumW = mode === 'STRICT' ? 100 : (c.wBTL + c.wQuiz + c.wGK + c.wCK);
+            const weights = { btl: c.wBTL, quiz: c.wQuiz, gk: c.wGK, ck: c.wCK };
+            const scores = { btl: c.btl, quiz: c.quiz, gk: c.gk, ck: c.ck };
+            if (weights[component] === 0) return { possible: false, msg: 'Trọng số = 0, không thể giải' };
+            let otherSum = 0;
+            for (const k of ['btl', 'quiz', 'gk', 'ck']) {
+                if (k !== component) otherSum += scores[k] * weights[k];
+            }
+            const required = (targetScore * sumW - otherSum) / weights[component];
+            if (required < 0 || required > 10) return { possible: false, required, msg: required < 0 ? 'Đã vượt mục tiêu' : 'Không khả thi (>10)' };
+            return { possible: true, required: Math.round(required * 100) / 100 };
+        }
+
+        function goalSeekSemesterGPA(targetGPA, currentSem, doneSems, mode, mapping) {
+            let cumCredits = 0, cumWeighted = 0;
+            for (const sem of doneSems) {
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid && c.credits > 0) {
+                        cumCredits += c.credits;
+                        cumWeighted += res.score * c.credits;
+                    }
+                }
+            }
+            let semCredits = 0;
+            for (const c of currentSem.courses) {
+                if (c.credits > 0) semCredits += c.credits;
+            }
+            if (semCredits === 0) return { possible: false, msg: 'Học kỳ hiện tại chưa có tín chỉ' };
+            const required = (targetGPA * (cumCredits + semCredits) - cumWeighted) / semCredits;
+            if (required < 0 || required > 10) return { possible: false, required, msg: required < 0 ? 'Đã đạt mục tiêu' : 'Không khả thi (GPA > 10)' };
+            return { possible: true, required: Math.round(required * 100) / 100, cumCredits, semCredits };
+        }
+
+        // ================= STORAGE =================
+        const STORAGE_KEY = 'gpa_calculator_pro_data';
+        function saveState() {
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn('Save failed:', e); }
+        }
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state = { ...state, ...parsed, settings: { ...state.settings, ...parsed.settings } };
+                    state.settings.mapping = [...DEFAULT_MAPPING];
+                }
+                applyTheme(state.settings.theme || 'light');
+            } catch (e) { console.warn('Load failed:', e); }
+        }
+
+        // ================= THEME SYSTEM =================
+        function applyTheme(theme) {
+            document.documentElement.className = '';
+            if (theme === 'dark') document.documentElement.classList.add('dark', 'theme-dark');
+            else if (theme !== 'light') document.documentElement.classList.add(`theme-${theme}`);
+            state.settings.theme = theme;
+            state.settings.darkMode = theme === 'dark';
+        }
+        function setTheme(theme) {
+            applyTheme(theme);
+            saveState();
+            render();
+            showToast(`Đã đổi sang theme ${theme.charAt(0).toUpperCase() + theme.slice(1)}`, 'success');
+        }
+
+        // ================= PDF EXPORT =================
+        async function exportPDF() {
+            showToast('Đang tạo PDF...', 'info');
+
+            const cumGPA = calcCumulativeGPA(state.semesters, state.settings.mode, state.settings.mapping);
+            const rank = getGraduationRank(cumGPA.gpa10);
+
+            // Create hidden HTML for PDF
+            const pdfContent = document.createElement('div');
+            pdfContent.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:Arial,sans-serif;color:black;';
+
+            let semestersHTML = '';
+            for (const sem of state.semesters) {
+                if (!sem.includedInCum) continue;
+                const semGPA = calcSemesterGPA(sem, state.settings.mode, state.settings.mapping);
+                semestersHTML += `
+                    <div style="margin-top:20px;">
+                        <h3 style="color:#6366f1;margin-bottom:10px;">${sem.name} (GPA: ${semGPA.gpa10})</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                            <thead><tr style="background:#6366f1;color:white;">
+                                <th style="padding:8px;border:1px solid #ddd;text-align:left;">Môn học</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:50px;">TC</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:60px;">Điểm</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:70px;">Xếp loại</th>
+                            </tr></thead>
+                            <tbody>
+                                ${semGPA.courses.map((c, i) => `
+                                    <tr style="background:${i % 2 ? '#f8f9fa' : 'white'};">
+                                        <td style="padding:8px;border:1px solid #ddd;">${c.name || '(Chưa đặt tên)'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.credits}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? c.score : '-'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? getLetter(c.score, state.settings.mapping) : '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            pdfContent.innerHTML = `
+                <h1 style="color:#6366f1;text-align:center;margin-bottom:20px;">📊 GPA Calculator Pro - Bảng điểm</h1>
+                <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <p style="margin:5px 0;"><strong>Ngày xuất:</strong> ${new Date().toLocaleDateString('vi-VN')}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 10):</strong> ${cumGPA.gpa10}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 4):</strong> ${cumGPA.gpa4}</p>
+                    <p style="margin:5px 0;"><strong>Xếp loại:</strong> ${rank.rank} ${rank.latin ? '(' + rank.latin + ')' : ''}</p>
+                    <p style="margin:5px 0;"><strong>Tổng tín chỉ:</strong> ${cumGPA.totalCredits}</p>
+                </div>
+                ${semestersHTML}
+                <p style="margin-top:30px;font-size:12px;color:#666;text-align:center;">
+                    Xuất từ GPA Calculator Pro - ${new Date().toLocaleString('vi-VN')}
+                </p>
+            `;
+
+            document.body.appendChild(pdfContent);
+
+            try {
+                const canvas = await html2canvas(pdfContent, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = pdfHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                heightLeft -= pdf.internal.pageSize.getHeight();
+
+                while (heightLeft > 0) {
+                    position = heightLeft - pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                    heightLeft -= pdf.internal.pageSize.getHeight();
+                }
+
+                pdf.save(`GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                showToast('Đã xuất PDF thành công!', 'success');
+            } catch (err) {
+                console.error('PDF Error:', err);
+                showToast('Lỗi xuất PDF: ' + err.message, 'danger');
+            } finally {
+                document.body.removeChild(pdfContent);
+            }
+        }
+
+        // ================= KEYBOARD SHORTCUTS =================
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (e.key === '?' || (e.shiftKey && e.key === '/')) { showShortcutsModal(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'n') { addCourse(); e.preventDefault(); }
+            if (e.ctrlKey && e.shiftKey && e.key === 'N') { addSemester(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'e') { exportJSON(); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'd') { setTheme(state.settings.theme === 'dark' ? 'light' : 'dark'); e.preventDefault(); }
+            if (e.ctrlKey && e.key === 'p') { exportPDF(); e.preventDefault(); }
+        });
+
+        function showShortcutsModal() {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">⌨️ Phím tắt</span>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="shortcuts-grid">
+              <span class="kbd">Ctrl+N</span><span>Thêm môn học mới</span>
+              <span class="kbd">Ctrl+Shift+N</span><span>Thêm học kỳ mới</span>
+              <span class="kbd">Ctrl+E</span><span>Export JSON</span>
+              <span class="kbd">Ctrl+P</span><span>Xuất PDF</span>
+              <span class="kbd">Ctrl+D</span><span>Đổi Light/Dark Mode</span>
+              <span class="kbd">?</span><span>Hiển thị bảng phím tắt</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+          </div>
+        </div>`;
+            document.body.appendChild(overlay);
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+        }
+
+        function exportJSON() {
+            const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gpa_data_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Đã xuất dữ liệu JSON!', 'success');
+        }
+
+        function importJSON(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.semesters && Array.isArray(data.semesters)) {
+                        state = { ...state, ...data };
+                        saveState();
+                        render();
+                        alert('Import thành công!');
+                    } else {
+                        alert('File không hợp lệ!');
+                    }
+                } catch (err) {
+                    alert('Lỗi đọc file: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ================= HELPERS =================
+        function genId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
+
+        function createCourse() {
+            return { id: genId(), name: '', credits: 3, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 };
+        }
+
+        function createSemester(name) {
+            return { id: genId(), name, courses: [], includedInCum: true };
+        }
+
+        function getActiveSemester() {
+            return state.semesters.find(s => s.id === state.activeSemesterId);
+        }
+
+        // ================= UI RENDER =================
+        function render() {
+            applyTheme(state.settings.theme || 'light');
+            const cumGPA = calcCumulativeGPA(state.semesters, state.settings.mode, state.settings.mapping);
+            const activeSem = getActiveSemester();
+            const semGPA = activeSem ? calcSemesterGPA(activeSem, state.settings.mode, state.settings.mapping) : null;
+            const gradRank = getGraduationRank(cumGPA.gpa10);
+
+            // Check GPA goal warning
+            if (cumGPA.totalCredits > 0 && cumGPA.gpa10 < state.settings.gpaGoal) {
+                setTimeout(() => showToast(`⚠️ GPA hiện tại (${cumGPA.gpa10}) thấp hơn mục tiêu (${state.settings.gpaGoal})`, 'warning'), 500);
+            }
+
+            document.getElementById('app').innerHTML = `
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">📊</span>
+        <span class="app-title">GPA Calculator Pro</span>
+      </div>
+      <button class="btn btn-primary" onclick="addSemester()">+ Thêm học kỳ</button>
+      <div class="semester-list">
+        ${state.semesters.map(s => `
+          <div class="semester-item ${s.id === state.activeSemesterId ? 'active' : ''}" onclick="selectSemester('${s.id}')">
+            <div>
+              <div class="name">${s.name}</div>
+              <div class="stats">${s.courses.length} môn • ${s.includedInCum ? '✓ Tích lũy' : '✗ Không tích lũy'}</div>
+            </div>
+            <div class="semester-actions" onclick="event.stopPropagation()">
+              <button onclick="toggleInclude('${s.id}')" title="Đưa vào tích lũy">${s.includedInCum ? '☑' : '☐'}</button>
+              <button onclick="renameSemester('${s.id}')" title="Đổi tên">✏</button>
+              <button onclick="duplicateSemester('${s.id}')" title="Nhân bản">📋</button>
+              <button onclick="deleteSemester('${s.id}')" title="Xóa">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+        ${state.semesters.length === 0 ? '<div class="empty-state"><div class="icon">📚</div><div>Chưa có học kỳ nào</div></div>' : ''}
+      </div>
+      <div style="border-top: 1px solid var(--border); padding-top: 12px;">
+        <button class="btn btn-secondary" style="width:100%; margin-bottom: 8px;" onclick="showSettings()">⚙ Cài đặt</button>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="exportJSON()">📥 JSON</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1" onclick="exportPDF()">📄 PDF</button>
+        </div>
+        <label class="btn btn-secondary btn-sm" style="width:100%; cursor: pointer;">📤 Import<input type="file" accept=".json" style="display:none" onchange="handleImport(event)"></label>
+      </div>
+    </aside>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <h1 class="header-title">${activeSem ? activeSem.name : 'Chọn học kỳ'}</h1>
+          ${cumGPA.totalCredits > 0 ? `<span class="graduation-badge ${gradRank.class}">${gradRank.icon} ${gradRank.rank}${gradRank.latin ? ' - ' + gradRank.latin : ''}</span>` : ''}
+        </div>
+        <div class="kpi-cards">
+          ${semGPA ? `
+            <div class="kpi-card">
+              <div class="kpi-label">GPA Học kỳ (10)</div>
+              <div class="kpi-value">${semGPA.gpa10}</div>
+            </div>
+            <div class="kpi-card secondary">
+              <div class="kpi-label">GPA Học kỳ (4)</div>
+              <div class="kpi-value">${semGPA.gpa4}</div>
+            </div>
+          ` : ''}
+          <div class="kpi-card">
+            <div class="kpi-label">GPA Tích lũy (10)</div>
+            <div class="kpi-value">${cumGPA.gpa10}</div>
+          </div>
+          <div class="kpi-card secondary">
+            <div class="kpi-label">Tổng tín chỉ</div>
+            <div class="kpi-value">${cumGPA.totalCredits}</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="showShortcutsModal()" title="Phím tắt">⌨</button>
+          <button class="icon-btn" onclick="runTests()" title="Chạy tests">🧪</button>
+        </div>
+      </header>
+      <div class="tabs">
+        <button class="tab ${state.activeTab === 'courses' ? 'active' : ''}" onclick="setTab('courses')">📝 Môn học</button>
+        <button class="tab ${state.activeTab === 'stats' ? 'active' : ''}" onclick="setTab('stats')">📈 Thống kê</button>
+        <button class="tab ${state.activeTab === 'whatif' ? 'active' : ''}" onclick="setTab('whatif')">🔮 Dự báo</button>
+        <button class="tab ${state.activeTab === 'goals' ? 'active' : ''}" onclick="setTab('goals')">🎯 Mục tiêu</button>
+        <button class="tab ${state.activeTab === 'templates' ? 'active' : ''}" onclick="setTab('templates')">📋 Templates</button>
+      </div>
+      <div class="content">
+        ${renderTabContent(state.activeTab, activeSem, semGPA)}
+      </div>
+    </main>
+  `;
+            if (state.activeTab === 'stats') setTimeout(renderCharts, 100);
+        }
+
+        function renderTabContent(tab, activeSem, semGPA) {
+            switch (tab) {
+                case 'courses': return renderCoursesTab(activeSem, semGPA);
+                case 'stats': return renderStatsTab();
+                case 'whatif': return renderWhatIfTab();
+                case 'goals': return renderGoalsTab();
+                case 'templates': return renderTemplatesTab();
+                default: return renderCoursesTab(activeSem, semGPA);
+            }
+        }
+
+        function renderCoursesTab(activeSem, semGPA) {
+            if (!activeSem) {
+                return '<div class="empty-state"><div class="icon">👈</div><div>Chọn hoặc tạo học kỳ để bắt đầu</div></div>';
+            }
+            const courses = semGPA ? semGPA.courses : activeSem.courses.map(c => ({ ...c, valid: true, score: 0 }));
+            return `
+    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="badge ${state.settings.mode === 'STRICT' ? 'badge-warning' : 'badge-success'}">${state.settings.mode === 'STRICT' ? '⚠ Strict' : '✓ Auto-Normalize'}</span>
+      </div>
+      <button class="btn btn-primary" onclick="addCourse()">+ Thêm môn học</button>
+    </div>
+    <div class="course-table-wrapper">
+      <table class="course-table">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Tên môn</th>
+            <th style="width:60px">TC</th>
+            <th style="width:60px">BTL</th>
+            <th style="width:60px">Quiz</th>
+            <th style="width:60px">GK</th>
+            <th style="width:60px">CK</th>
+            <th style="width:60px">%BTL</th>
+            <th style="width:60px">%Quiz</th>
+            <th style="width:60px">%GK</th>
+            <th style="width:60px">%CK</th>
+            <th style="width:100px">Template</th>
+            <th style="width:80px">Điểm</th>
+            <th style="width:50px">Xếp</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${courses.map((c, i) => `
+            <tr>
+              <td style="text-align:center">${i + 1}</td>
+              <td><input type="text" class="input-name" value="${c.name}" onchange="updateCourse('${c.id}','name',this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.credits}" min="1" onchange="updateCourse('${c.id}','credits',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.btl}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','btl',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.quiz}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','quiz',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.gk}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','gk',+this.value)"></td>
+              <td><input type="number" class="input-sm" value="${c.ck}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','ck',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wBTL}" min="0" max="100" onchange="updateCourse('${c.id}','wBTL',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wQuiz}" min="0" max="100" onchange="updateCourse('${c.id}','wQuiz',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wGK}" min="0" max="100" onchange="updateCourse('${c.id}','wGK',+this.value)"></td>
+              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wCK}" min="0" max="100" onchange="updateCourse('${c.id}','wCK',+this.value)"></td>
+              <td>
+                <select onchange="applyTemplate('${c.id}', this.value)">
+                  <option value="">-- Chọn --</option>
+                  ${WEIGHT_TEMPLATES.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}
+                </select>
+              </td>
+              <td class="score-cell ${c.valid ? (c.score >= 8 ? 'high' : c.score >= 5 ? 'medium' : 'low') : ''}">
+                ${c.valid ? c.score : '-'}
+                ${c.normalized ? '<span class="badge badge-warning" title="Đã chuẩn hóa">~</span>' : ''}
+                ${!c.valid ? `<span class="badge badge-danger" title="${c.msg}">!</span>` : ''}
+              </td>
+              <td>${c.valid ? getLetter(c.score, state.settings.mapping) : '-'}</td>
+              <td><span class="delete-btn" onclick="deleteCourse('${c.id}')">🗑</span></td>
+            </tr>
+          `).join('')}
+          ${courses.length === 0 ? '<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--text-secondary)">Chưa có môn học nào. Nhấn "+ Thêm môn học" để bắt đầu.</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+        }
+
+        function renderGoalsTab() {
+            return `
+    <div class="goal-panel">
+      <div class="goal-section">
+        <div class="goal-title">🎯 Mục tiêu GPA Tích lũy</div>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">Tính GPA học kỳ cần đạt để đạt mục tiêu GPA tích lũy.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">GPA mục tiêu (thang 10)</label>
+            <input type="number" class="form-input" id="goal-cum-target" value="8.0" min="0" max="10" step="0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Học kỳ đang học</label>
+            <select class="form-input" id="goal-cum-current">
+              ${state.semesters.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="calcGoalCumulative()">Tính toán</button>
+        <div id="goal-cum-result" class="result-box" style="display:none;"></div>
+      </div>
+
+      <div class="goal-section">
+        <div class="goal-title">📊 Mục tiêu cho 1 thành phần điểm</div>
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">Tính điểm cần đạt cho một thành phần (BTL/Quiz/GK/CK) để đạt điểm môn mong muốn.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Học kỳ</label>
+            <select class="form-input" id="goal-comp-sem" onchange="updateGoalCourseSelect()">
+              ${state.semesters.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Môn học</label>
+            <select class="form-input" id="goal-comp-course"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Thành phần cần tính</label>
+            <select class="form-input" id="goal-comp-component">
+              <option value="ck">Cuối kỳ (CK)</option>
+              <option value="gk">Giữa kỳ (GK)</option>
+              <option value="quiz">Quiz</option>
+              <option value="btl">BTL</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Điểm môn mục tiêu</label>
+            <input type="number" class="form-input" id="goal-comp-target" value="8.0" min="0" max="10" step="0.1">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="calcGoalComponent()">Tính toán</button>
+        <div id="goal-comp-result" class="result-box" style="display:none;"></div>
+      </div>
+    </div>
+  `;
+        }
+
+        // ================= STATS TAB =================
+        function renderStatsTab() {
+            const history = getSemesterGPAHistory(state.semesters, state.settings.mode, state.settings.mapping);
+            const dist = getGradeDistribution(state.semesters, state.settings.mode, state.settings.mapping);
+            return `
+    <div class="chart-grid">
+      <div class="chart-container">
+        <div class="chart-title">📈 Xu hướng GPA qua các học kỳ</div>
+        <canvas id="gpaLineChart" height="200"></canvas>
+        ${history.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;">Chưa có dữ liệu học kỳ</p>' : ''}
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">🥧 Phân bố xếp loại điểm</div>
+        <canvas id="gradePieChart" height="200"></canvas>
+      </div>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">📊 Tổng quan theo học kỳ</div>
+      <table class="course-table">
+        <thead><tr><th>Học kỳ</th><th>GPA (10)</th><th>GPA (4)</th><th>Xếp loại</th></tr></thead>
+        <tbody>
+          ${history.map(h => {
+                const rank = getGraduationRank(h.gpa10);
+                return `<tr><td>${h.name}</td><td>${h.gpa10}</td><td>${h.gpa4}</td><td><span class="graduation-badge ${rank.class}" style="font-size:11px;padding:4px 8px;">${rank.icon} ${rank.rank}</span></td></tr>`;
+            }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+        }
+
+        function renderCharts() {
+            const history = getSemesterGPAHistory(state.semesters, state.settings.mode, state.settings.mapping);
+            const dist = getGradeDistribution(state.semesters, state.settings.mode, state.settings.mapping);
+
+            const lineCtx = document.getElementById('gpaLineChart')?.getContext('2d');
+            if (lineCtx && history.length > 0) {
+                new Chart(lineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: history.map(h => h.name),
+                        datasets: [{
+                            label: 'GPA (10)',
+                            data: history.map(h => h.gpa10),
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: { responsive: true, scales: { y: { min: 0, max: 10 } } }
+                });
+            }
+
+            const pieCtx = document.getElementById('gradePieChart')?.getContext('2d');
+            if (pieCtx) {
+                const colors = ['#a855f7', '#6366f1', '#22c55e', '#3b82f6', '#06b6d4', '#f59e0b', '#eab308', '#f97316', '#ef4444'];
+                new Chart(pieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(dist),
+                        datasets: [{ data: Object.values(dist), backgroundColor: colors }]
+                    },
+                    options: { responsive: true }
+                });
+            }
+        }
+
+        // ================= WHAT-IF TAB =================
+        function renderWhatIfTab() {
+            const activeSem = getActiveSemester();
+            if (!activeSem) return '<div class="empty-state"><div class="icon">🔮</div><div>Chọn học kỳ để sử dụng Dự báo</div></div>';
+
+            return `
+    <div class="goal-panel">
+      <div class="goal-title">🔮 Dự báo điểm (What-If Analysis)</div>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Nhập điểm dự kiến cho các thành phần chưa có để xem GPA dự kiến.</p>
+      <div class="course-table-wrapper">
+        <table class="course-table">
+          <thead><tr><th>Môn học</th><th>TC</th><th>BTL</th><th>Quiz</th><th>GK</th><th>CK (Dự kiến)</th><th>Điểm dự kiến</th></tr></thead>
+          <tbody>
+            ${activeSem.courses.map(c => {
+                const whatIfCK = state.whatIfData[c.id] ?? c.ck;
+                const tempCourse = { ...c, ck: whatIfCK };
+                const res = calcCourseScore(tempCourse, state.settings.mode);
+                return `<tr>
+                <td>${c.name || '(Chưa đặt tên)'}</td>
+                <td>${c.credits}</td>
+                <td>${c.btl}</td>
+                <td>${c.quiz}</td>
+                <td>${c.gk}</td>
+                <td><input type="number" class="input-sm whatif-input" value="${whatIfCK}" min="0" max="10" step="0.1" onchange="updateWhatIf('${c.id}', +this.value)"></td>
+                <td class="score-cell ${res.valid ? (res.score >= 8 ? 'high' : res.score >= 5 ? 'medium' : 'low') : ''}">${res.valid ? res.score : '-'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="result-box" style="margin-top:16px;">
+        <div class="result-label">GPA Dự kiến học kỳ này:</div>
+        <div class="result-value">${calcWhatIfGPA()}</div>
+      </div>
+    </div>
+  `;
+        }
+
+        function updateWhatIf(courseId, value) {
+            state.whatIfData[courseId] = value;
+            render();
+        }
+
+        function calcWhatIfGPA() {
+            const activeSem = getActiveSemester();
+            if (!activeSem) return 0;
+            let total = 0, weighted = 0;
+            for (const c of activeSem.courses) {
+                const whatIfCK = state.whatIfData[c.id] ?? c.ck;
+                const tempCourse = { ...c, ck: whatIfCK };
+                const res = calcCourseScore(tempCourse, state.settings.mode);
+                if (res.valid && c.credits > 0) { total += c.credits; weighted += res.score * c.credits; }
+            }
+            return total > 0 ? (weighted / total).toFixed(2) : 0;
+        }
+
+        // ================= TEMPLATES TAB =================
+        function renderTemplatesTab() {
+            const templates = state.settings.courseTemplates || [];
+            return `
+    <div class="goal-panel">
+      <div class="goal-title">📋 Quản lý Template Môn học</div>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Lưu các môn học thường dùng để thêm nhanh vào học kỳ.</p>
+      <button class="btn btn-primary" onclick="saveCurrentCourseAsTemplate()" style="margin-bottom:16px;">+ Lưu môn học hiện tại</button>
+      <div class="template-list">
+        ${templates.length === 0 ? '<p style="color:var(--text-secondary);">Chưa có template nào. Thêm môn học vào học kỳ rồi lưu làm template.</p>' : ''}
+        ${templates.map((t, i) => `
+          <div class="template-item">
+            <div>
+              <strong>${t.name || '(Chưa đặt tên)'}</strong>
+              <div style="font-size:12px;color:var(--text-secondary);">${t.credits} TC • BTL:${t.wBTL}% Quiz:${t.wQuiz}% GK:${t.wGK}% CK:${t.wCK}%</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm btn-secondary" onclick="addCourseFromTemplate(${i})">➕ Thêm</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteTemplate(${i})">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+        }
+
+        function saveCurrentCourseAsTemplate() {
+            const activeSem = getActiveSemester();
+            if (!activeSem || activeSem.courses.length === 0) { showToast('Chưa có môn học để lưu!', 'warning'); return; }
+            const lastCourse = activeSem.courses[activeSem.courses.length - 1];
+            if (!state.settings.courseTemplates) state.settings.courseTemplates = [];
+            state.settings.courseTemplates.push({ ...lastCourse, id: undefined });
+            saveState();
+            render();
+            showToast('Đã lưu template!', 'success');
+        }
+
+        function addCourseFromTemplate(idx) {
+            const activeSem = getActiveSemester();
+            if (!activeSem) { showToast('Chọn học kỳ trước!', 'warning'); return; }
+            const template = state.settings.courseTemplates[idx];
+            activeSem.courses.push({ ...template, id: genId() });
+            saveState();
+            setTab('courses');
+            showToast('Đã thêm môn từ template!', 'success');
+        }
+
+        function deleteTemplate(idx) {
+            state.settings.courseTemplates.splice(idx, 1);
+            saveState();
+            render();
+            showToast('Đã xóa template!', 'info');
+        }
+
+        // ================= EVENT HANDLERS =================
+        function addSemester() {
+            const name = prompt('Tên học kỳ:', `Học kỳ ${state.semesters.length + 1}`);
+            if (name) {
+                const sem = createSemester(name);
+                state.semesters.push(sem);
+                state.activeSemesterId = sem.id;
+                saveState();
+                render();
+            }
+        }
+
+        function selectSemester(id) {
+            state.activeSemesterId = id;
+            render();
+        }
+
+        function renameSemester(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            const name = prompt('Tên mới:', sem.name);
+            if (name) {
+                sem.name = name;
+                saveState();
+                render();
+            }
+        }
+
+        function deleteSemester(id) {
+            if (confirm('Xóa học kỳ này?')) {
+                state.semesters = state.semesters.filter(s => s.id !== id);
+                if (state.activeSemesterId === id) state.activeSemesterId = state.semesters[0]?.id || null;
+                saveState();
+                render();
+            }
+        }
+
+        function duplicateSemester(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            const newSem = createSemester(sem.name + ' (copy)');
+            newSem.courses = sem.courses.map(c => ({ ...c, id: genId() }));
+            state.semesters.push(newSem);
+            saveState();
+            render();
+        }
+
+        function toggleInclude(id) {
+            const sem = state.semesters.find(s => s.id === id);
+            sem.includedInCum = !sem.includedInCum;
+            saveState();
+            render();
+        }
+
+        function addCourse() {
+            const sem = getActiveSemester();
+            if (sem) {
+                sem.courses.push(createCourse());
+                saveState();
+                render();
+            }
+        }
+
+        function updateCourse(id, field, value) {
+            const sem = getActiveSemester();
+            const course = sem.courses.find(c => c.id === id);
+            if (course) {
+                course[field] = value;
+                saveState();
+                render();
+            }
+        }
+
+        function deleteCourse(id) {
+            const sem = getActiveSemester();
+            sem.courses = sem.courses.filter(c => c.id !== id);
+            saveState();
+            render();
+        }
+
+        function applyTemplate(courseId, templateIdx) {
+            if (templateIdx === '') return;
+            const t = WEIGHT_TEMPLATES[+templateIdx];
+            const sem = getActiveSemester();
+            const course = sem.courses.find(c => c.id === courseId);
+            if (course && t) {
+                course.wBTL = t.wBTL;
+                course.wQuiz = t.wQuiz;
+                course.wGK = t.wGK;
+                course.wCK = t.wCK;
+                saveState();
+                render();
+            }
+        }
+
+        function setTab(tab) {
+            state.activeTab = tab;
+            render();
+            if (tab === 'goals') setTimeout(updateGoalCourseSelect, 0);
+        }
+
+        function toggleDarkMode() {
+            state.settings.darkMode = !state.settings.darkMode;
+            saveState();
+            render();
+        }
+
+        function handleImport(e) {
+            const file = e.target.files[0];
+            if (file) importJSON(file);
+        }
+
+        function updateGoalCourseSelect() {
+            const semId = document.getElementById('goal-comp-sem')?.value;
+            const sem = state.semesters.find(s => s.id === semId);
+            const select = document.getElementById('goal-comp-course');
+            if (select && sem) {
+                select.innerHTML = sem.courses.map(c => `<option value="${c.id}">${c.name || '(Chưa đặt tên)'}</option>`).join('');
+            }
+        }
+
+        function calcGoalCumulative() {
+            const target = +document.getElementById('goal-cum-target').value;
+            const currentId = document.getElementById('goal-cum-current').value;
+            const currentSem = state.semesters.find(s => s.id === currentId);
+            const doneSems = state.semesters.filter(s => s.id !== currentId && s.includedInCum);
+            const result = goalSeekSemesterGPA(target, currentSem, doneSems, state.settings.mode, state.settings.mapping);
+            const div = document.getElementById('goal-cum-result');
+            div.style.display = 'block';
+            if (result.possible) {
+                div.innerHTML = `
+      <div class="result-value">${result.required}</div>
+      <div class="result-label">GPA học kỳ cần đạt (thang 10)</div>
+      <p style="margin-top:12px;color:var(--text-secondary);font-size:13px;">
+        Tín chỉ đã tích lũy: ${result.cumCredits} • Tín chỉ học kỳ này: ${result.semCredits}
+      </p>
+    `;
+            } else {
+                div.innerHTML = `<span class="badge badge-danger">${result.msg}</span> ${result.required !== undefined ? `(Cần: ${result.required.toFixed(2)})` : ''}`;
+            }
+        }
+
+        function calcGoalComponent() {
+            const semId = document.getElementById('goal-comp-sem').value;
+            const courseId = document.getElementById('goal-comp-course').value;
+            const component = document.getElementById('goal-comp-component').value;
+            const target = +document.getElementById('goal-comp-target').value;
+            const sem = state.semesters.find(s => s.id === semId);
+            const course = sem?.courses.find(c => c.id === courseId);
+            if (!course) {
+                alert('Vui lòng chọn môn học');
+                return;
+            }
+            const result = goalSeekComponent(course, target, component, state.settings.mode);
+            const div = document.getElementById('goal-comp-result');
+            div.style.display = 'block';
+            const labels = { ck: 'Cuối kỳ', gk: 'Giữa kỳ', quiz: 'Quiz', btl: 'BTL' };
+            if (result.possible) {
+                div.innerHTML = `
+      <div class="result-value">${result.required}</div>
+      <div class="result-label">Điểm ${labels[component]} cần đạt</div>
+    `;
+            } else {
+                div.innerHTML = `<span class="badge badge-danger">${result.msg}</span> ${result.required !== undefined ? `(Cần: ${result.required.toFixed(2)})` : ''}`;
+            }
+        }
+
+        function showSettings() {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">⚙ Cài đặt</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <div class="settings-title">🎨 Theme</div>
+          <div class="theme-picker">
+            <button class="theme-btn ${state.settings.theme === 'light' ? 'active' : ''}" data-theme="light" onclick="setTheme('light')" title="Light"></button>
+            <button class="theme-btn ${state.settings.theme === 'dark' ? 'active' : ''}" data-theme="dark" onclick="setTheme('dark')" title="Dark"></button>
+            <button class="theme-btn ${state.settings.theme === 'ocean' ? 'active' : ''}" data-theme="ocean" onclick="setTheme('ocean')" title="Ocean"></button>
+            <button class="theme-btn ${state.settings.theme === 'forest' ? 'active' : ''}" data-theme="forest" onclick="setTheme('forest')" title="Forest"></button>
+            <button class="theme-btn ${state.settings.theme === 'sunset' ? 'active' : ''}" data-theme="sunset" onclick="setTheme('sunset')" title="Sunset"></button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">🎯 Mục tiêu GPA</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <input type="number" class="form-input" style="width:100px;" value="${state.settings.gpaGoal}" min="0" max="10" step="0.1" onchange="updateGPAGoal(+this.value)">
+            <span style="color:var(--text-secondary);">Cảnh báo khi GPA thấp hơn mục tiêu</span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">📐 Chế độ tính điểm</div>
+          <div class="toggle-container">
+            <button class="toggle-btn ${state.settings.mode === 'STRICT' ? 'active' : ''}" onclick="setMode('STRICT')">STRICT (Tổng % = 100)</button>
+            <button class="toggle-btn ${state.settings.mode === 'AUTO-NORMALIZE' ? 'active' : ''}" onclick="setMode('AUTO-NORMALIZE')">AUTO-NORMALIZE</button>
+          </div>
+          <p style="margin-top:8px;font-size:13px;color:var(--text-secondary);">
+            ${state.settings.mode === 'STRICT' ? 'Môn có tổng % ≠ 100 sẽ không được tính vào GPA.' : 'Tự động chuẩn hóa trọng số nếu tổng ≠ 100.'}
+          </p>
+        </div>
+        <div class="settings-section">
+          <div class="settings-title">📊 Bảng quy đổi GPA thang 4</div>
+          <table class="mapping-table">
+            <thead>
+              <tr><th>Từ</th><th>Đến</th><th>Xếp loại</th><th>GPA 4</th></tr>
+            </thead>
+            <tbody>
+              ${state.settings.mapping.map((m, i) => `
+                <tr>
+                  <td><input type="number" value="${m.min}" step="0.1" onchange="updateMapping(${i},'min',+this.value)"></td>
+                  <td><input type="number" value="${m.max}" step="0.1" onchange="updateMapping(${i},'max',+this.value)"></td>
+                  <td><input type="text" value="${m.letter}" maxlength="2" onchange="updateMapping(${i},'letter',this.value)"></td>
+                  <td><input type="number" value="${m.gp4}" step="0.1" onchange="updateMapping(${i},'gp4',+this.value)"></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="resetMapping()">Đặt lại mặc định</button>
+        <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+      </div>
+    </div>
+  `;
+            document.body.appendChild(overlay);
+            overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
+        }
+
+        function closeModal() {
+            document.querySelector('.modal-overlay')?.remove();
+        }
+
+        function setMode(mode) {
+            state.settings.mode = mode;
+            saveState();
+            closeModal();
+            render();
+            showSettings();
+        }
+
+        function updateMapping(idx, field, value) {
+            state.settings.mapping[idx][field] = value;
+            saveState();
+        }
+
+        function resetMapping() {
+            state.settings.mapping = [...DEFAULT_MAPPING];
+            saveState();
+            closeModal();
+            showSettings();
+        }
+
+        function updateGPAGoal(value) {
+            state.settings.gpaGoal = value;
+            saveState();
+            showToast(`Mục tiêu GPA đã được đặt thành ${value}`, 'success');
+        }
+
+        // ================= TESTS =================
+        function runTests() {
+            const results = [];
+            const pass = (name) => results.push({ name, pass: true });
+            const fail = (name, exp, got) => results.push({ name, pass: false, exp, got });
+
+            // TV1: STRICT course score = 7.0
+            const c1 = { btl: 8, quiz: 9, gk: 7, ck: 6, wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 };
+            const r1 = calcCourseScore(c1, 'STRICT');
+            r1.score === 7 ? pass('TV1: STRICT score=7.0') : fail('TV1', 7, r1.score);
+
+            // TV2: GPA semester = 7.8
+            const sem2 = { courses: [{ credits: 3, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100, _score: 7 }, { credits: 2, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100, _score: 9 }] };
+            sem2.courses[0].ck = 7; sem2.courses[1].ck = 9;
+            const r2 = calcSemesterGPA(sem2, 'STRICT', DEFAULT_MAPPING);
+            r2.gpa10 === 7.8 ? pass('TV2: Semester GPA=7.8') : fail('TV2', 7.8, r2.gpa10);
+
+            // TV3: AUTO-NORMALIZE = 6.75
+            const c3 = { btl: 8, quiz: 9, gk: 7, ck: 6, wBTL: 0, wQuiz: 10, wGK: 30, wCK: 40 };
+            const r3 = calcCourseScore(c3, 'AUTO-NORMALIZE');
+            r3.score === 6.75 ? pass('TV3: AUTO-NORMALIZE=6.75') : fail('TV3', 6.75, r3.score);
+
+            // TV4: Goal seek CK = 8.67
+            const c4 = { btl: 0, quiz: 0, gk: 7, ck: 0, wBTL: 0, wQuiz: 0, wGK: 40, wCK: 60 };
+            const r4 = goalSeekComponent(c4, 8, 'ck', 'STRICT');
+            Math.abs(r4.required - 8.67) < 0.01 ? pass('TV4: Goal CK=8.67') : fail('TV4', 8.67, r4.required);
+
+            // TV5: Required semester GPA = 8.4
+            const doneSems = [{ courses: [{ credits: 30, btl: 0, quiz: 0, gk: 0, ck: 7.5, wBTL: 0, wQuiz: 0, wGK: 0, wCK: 100 }] }];
+            const currSem = { courses: [{ credits: 15, btl: 0, quiz: 0, gk: 0, ck: 0, wBTL: 100, wQuiz: 0, wGK: 0, wCK: 0 }] };
+            const r5 = goalSeekSemesterGPA(7.8, currSem, doneSems, 'STRICT', DEFAULT_MAPPING);
+            r5.required === 8.4 ? pass('TV5: Required GPA=8.4') : fail('TV5', 8.4, r5.required);
+
+            // Show results
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">🧪 Kết quả Tests</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="test-results">
+${results.map(r => r.pass
+                ? `<div class="test-pass">✓ ${r.name}</div>`
+                : `<div class="test-fail">✗ ${r.name}\n  Expected: ${r.exp}, Got: ${r.got}</div>`
+            ).join('\n')}
+        </div>
+        <div style="margin-top:16px;padding:12px;background:var(--bg-tertiary);border-radius:8px;">
+          <strong>${results.filter(r => r.pass).length}/${results.length}</strong> tests passed
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal()">Đóng</button>
+      </div>
+    </div>
+  `;
+            document.body.appendChild(overlay);
+        }
+
+        // ================= INIT =================
+        loadState();
+        render();
+    </script>
+</body>
+
+</html>,<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPA Calculator Pro</title>
+    <meta name="description" content="Ứng dụng tính GPA đa học kỳ với Goal Seeking">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root,
+        .theme-light {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f1f5f9;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --radius: 12px;
+        }
+
+        .dark,
+        .theme-dark {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #475569;
+        }
+
+        .theme-ocean {
+            --bg-primary: #0c1929;
+            --bg-secondary: #0f2942;
+            --bg-tertiary: #1a3a5c;
+            --text-primary: #e0f2fe;
+            --text-secondary: #7dd3fc;
+            --accent: #0ea5e9;
+            --accent-hover: #0284c7;
+            --border: #1e4976;
+        }
+
+        .theme-forest {
+            --bg-primary: #0f1f14;
+            --bg-secondary: #162b1c;
+            --bg-tertiary: #1f3d26;
+            --text-primary: #dcfce7;
+            --text-secondary: #86efac;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --border: #2d5a37;
+        }
+
+        .theme-sunset {
+            --bg-primary: #1f1315;
+            --bg-secondary: #2d1b1e;
+            --bg-tertiary: #3d2428;
+            --text-primary: #fef2f2;
+            --text-secondary: #fca5a5;
+            --accent: #f97316;
+            --accent-hover: #ea580c;
+            --border: #5c3a3e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: all 0.3s;
+        }
+
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 24px;
+        }
+
+        .app-title {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .semester-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .semester-item {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .semester-item:hover {
+            background: var(--bg-primary);
+        }
+
+        .semester-item.active {
+            border-color: var(--accent);
+            background: var(--bg-primary);
+        }
+
+        .semester-item .name {
+            font-weight: 500;
+        }
+
+        .semester-item .stats {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .semester-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .semester-actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .semester-actions button:hover {
+            background: var(--border);
+            color: var(--text-primary);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 20px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .kpi-cards {
+            display: flex;
+            gap: 16px;
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+            padding: 12px 20px;
+            border-radius: var(--radius);
+            color: white;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        .kpi-card.secondary {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: none;
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--border);
+            transform: scale(1.05);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .course-table-wrapper {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .course-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .course-table th,
+        .course-table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .course-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            position: sticky;
+            top: 0;
+        }
+
+        .course-table td {
+            font-size: 14px;
+        }
+
+        .course-table tr:hover td {
+            background: var(--bg-tertiary);
+        }
+
+        .course-table input,
+        .course-table select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .course-table input:focus,
+        .course-table select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .course-table input.invalid {
+            border-color: var(--danger);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .input-sm {
+            width: 60px !important;
+            text-align: center;
+        }
+
+        .input-name {
+            min-width: 150px;
+        }
+
+        .score-cell {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .score-cell.high {
+            color: var(--success);
+        }
+
+        .score-cell.medium {
+            color: var(--warning);
+        }
+
+        .score-cell.low {
+            color: var(--danger);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .delete-btn {
+            color: var(--danger);
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .delete-btn:hover {
+            opacity: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+        }
+
+        .goal-panel {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .goal-section {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .goal-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .goal-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-box {
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+
+        .result-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .result-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .test-results {
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        .test-pass {
+            color: var(--success);
+        }
+
+        .test-fail {
+            color: var(--danger);
+        }
+
+        .settings-section {
+            margin-bottom: 24px;
+        }
+
+        .settings-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .mapping-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .mapping-table th,
+        .mapping-table td {
+            padding: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .mapping-table input {
+            width: 60px;
+            text-align: center;
+            padding: 4px;
+        }
+
+        .toggle-container {
+            display: flex;
+            gap: 8px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .toggle-btn:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .toggle-btn:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+
+        .toggle-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .include-toggle {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .app {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 200px;
+            }
+
+            .kpi-cards {
+                flex-wrap: wrap;
+            }
+
+            .form-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            padding: 14px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast-success {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .toast-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .toast-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .toast-info {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Charts */
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 24px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Graduation Badge */
+        .graduation-badge {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: #1e293b;
+            font-weight: 700;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .graduation-badge.excellent {
+            background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .graduation-badge.good {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+        }
+
+        .graduation-badge.fair {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        /* Theme Picker */
+        .theme-picker {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .theme-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .theme-btn.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--bg-secondary);
+        }
+
+        .theme-btn[data-theme="light"] {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+        }
+
+        .theme-btn[data-theme="dark"] {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+        }
+
+        .theme-btn[data-theme="ocean"] {
+            background: linear-gradient(135deg, #0ea5e9, #0c1929);
+        }
+
+        .theme-btn[data-theme="forest"] {
+            background: linear-gradient(135deg, #22c55e, #0f1f14);
+        }
+
+        .theme-btn[data-theme="sunset"] {
+            background: linear-gradient(135deg, #f97316, #1f1315);
+        }
+
+        /* Keyboard Shortcuts */
+        .kbd {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .shortcuts-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 16px;
+            align-items: center;
+        }
+
+        /* Course Template */
+        .template-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .template-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+
+        .template-item:hover {
+            background: var(--border);
+        }
+
+        /* What-If Table */
+        .whatif-input {
+            background: rgba(99, 102, 241, 0.1) !important;
+            border-color: var(--accent) !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app" id="app"></div>
+
+    <script>
+        // ================= CORE DATA =================
+        const DEFAULT_MAPPING = [
+            { min: 9.5, max: 10, letter: 'A+', gp4: 4.0 },
+            { min: 8.5, max: 9.4, letter: 'A', gp4: 4.0 },
+            { min: 8.0, max: 8.4, letter: 'B+', gp4: 3.5 },
+            { min: 7.0, max: 7.9, letter: 'B', gp4: 3.0 },
+            { min: 6.5, max: 6.9, letter: 'C+', gp4: 2.5 },
+            { min: 5.5, max: 6.4, letter: 'C', gp4: 2.0 },
+            { min: 5.0, max: 5.4, letter: 'D+', gp4: 1.5 },
+            { min: 4.0, max: 4.9, letter: 'D', gp4: 1.0 },
+            { min: 0, max: 3.9, letter: 'F', gp4: 0.0 }
+        ];
+
+        const WEIGHT_TEMPLATES = [
+            { name: 'Mặc định (20/10/30/40)', wBTL: 20, wQuiz: 10, wGK: 30, wCK: 40 },
+            { name: 'Không BTL (0/10/30/60)', wBTL: 0, wQuiz: 10, wGK: 30, wCK: 60 },
+            { name: 'Không Quiz (20/0/30/50)', wBTL: 20, wQuiz: 0, wGK: 30, wCK: 50 },
+            { name: 'Chỉ GK+CK (0/0/40/60)', wBTL: 0, wQuiz: 0, wGK: 40, wCK: 60 }
+        ];
+
+        let state = {
+            semesters: [],
+            activeSemesterId: null,
+            activeTab: 'courses',
+            settings: {
+                mode: 'STRICT',
+                mapping: [...DEFAULT_MAPPING],
+                darkMode: false,
+                theme: 'light',
+                gpaGoal: 8.0,
+                courseTemplates: []
+            },
+            whatIfData: {}
+        };
+
+        // ================= GRADUATION RANKING =================
+        function getGraduationRank(gpa10) {
+            if (gpa10 >= 9.0) return { rank: 'Xuất sắc', latin: 'Summa Cum Laude', class: 'excellent', icon: '🏆' };
+            if (gpa10 >= 8.0) return { rank: 'Giỏi', latin: 'Magna Cum Laude', class: 'good', icon: '🥇' };
+            if (gpa10 >= 7.0) return { rank: 'Khá', latin: 'Cum Laude', class: 'fair', icon: '🥈' };
+            if (gpa10 >= 5.0) return { rank: 'Trung bình', latin: '', class: '', icon: '📜' };
+            return { rank: 'Yếu', latin: '', class: '', icon: '⚠️' };
+        }
+
+        // ================= TOAST NOTIFICATIONS =================
+        function showToast(message, type = 'info') {
+            let container = document.querySelector('.toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ================= GRADE DISTRIBUTION =================
+        function getGradeDistribution(semesters, mode, mapping) {
+            const dist = { 'A+': 0, 'A': 0, 'B+': 0, 'B': 0, 'C+': 0, 'C': 0, 'D+': 0, 'D': 0, 'F': 0 };
+            for (const sem of semesters) {
+                if (!sem.includedInCum) continue;
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid) dist[getLetter(res.score, mapping)]++;
+                }
+            }
+            return dist;
+        }
+
+        // ================= SEMESTER GPA HISTORY =================
+        function getSemesterGPAHistory(semesters, mode, mapping) {
+            return semesters.filter(s => s.includedInCum).map(sem => {
+                const res = calcSemesterGPA(sem, mode, mapping);
+                return { name: sem.name, gpa10: res.gpa10, gpa4: res.gpa4 };
+            });
+        }
+
+        // ================= CORE CALCULATIONS =================
+        function calcCourseScore(c, mode) {
+            const sumW = c.wBTL + c.wQuiz + c.wGK + c.wCK;
+            if (mode === 'STRICT' && Math.abs(sumW - 100) > 0.01) return { valid: false, score: 0, msg: 'Tổng % ≠ 100' };
+            if (sumW === 0) return { valid: false, score: 0, msg: 'Tổng % = 0' };
+            const raw = c.btl * c.wBTL + c.quiz * c.wQuiz + c.gk * c.wGK + c.ck * c.wCK;
+            const score = mode === 'STRICT' ? raw / 100 : raw / sumW;
+            return { valid: true, score: Math.round(score * 100) / 100, normalized: sumW !== 100, sumW };
+        }
+
+        function getGP4(score10, mapping) {
+            for (const m of mapping) {
+                if (score10 >= m.min && score10 <= m.max) return m.gp4;
+            }
+            return 0;
+        }
+
+        function getLetter(score10, mapping) {
+            for (const m of mapping) {
+                if (score10 >= m.min && score10 <= m.max) return m.letter;
+            }
+            return 'F';
+        }
+
+        function calcSemesterGPA(sem, mode, mapping) {
+            let totalCredits = 0, weighted10 = 0, weighted4 = 0;
+            const courses = [];
+            for (const c of sem.courses) {
+                const res = calcCourseScore(c, mode);
+                courses.push({ ...c, ...res });
+                if (res.valid && c.credits > 0) {
+                    totalCredits += c.credits;
+                    weighted10 += res.score * c.credits;
+                    weighted4 += getGP4(res.score, mapping) * c.credits;
+                }
+            }
+            const gpa10 = totalCredits > 0 ? Math.round((weighted10 / totalCredits) * 100) / 100 : 0;
+            const gpa4 = totalCredits > 0 ? Math.round((weighted4 / totalCredits) * 100) / 100 : 0;
+            return { gpa10, gpa4, totalCredits, courses };
+        }
+
+        function calcCumulativeGPA(semesters, mode, mapping) {
+            let totalCredits = 0, weighted10 = 0, weighted4 = 0;
+            for (const sem of semesters) {
+                if (!sem.includedInCum) continue;
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid && c.credits > 0) {
+                        totalCredits += c.credits;
+                        weighted10 += res.score * c.credits;
+                        weighted4 += getGP4(res.score, mapping) * c.credits;
+                    }
+                }
+            }
+            const gpa10 = totalCredits > 0 ? Math.round((weighted10 / totalCredits) * 100) / 100 : 0;
+            const gpa4 = totalCredits > 0 ? Math.round((weighted4 / totalCredits) * 100) / 100 : 0;
+            return { gpa10, gpa4, totalCredits };
+        }
+
+        // ================= GOAL SEEKING =================
+        function goalSeekComponent(c, targetScore, component, mode) {
+            const sumW = mode === 'STRICT' ? 100 : (c.wBTL + c.wQuiz + c.wGK + c.wCK);
+            const weights = { btl: c.wBTL, quiz: c.wQuiz, gk: c.wGK, ck: c.wCK };
+            const scores = { btl: c.btl, quiz: c.quiz, gk: c.gk, ck: c.ck };
+            if (weights[component] === 0) return { possible: false, msg: 'Trọng số = 0, không thể giải' };
+            let otherSum = 0;
+            for (const k of ['btl', 'quiz', 'gk', 'ck']) {
+                if (k !== component) otherSum += scores[k] * weights[k];
+            }
+            const required = (targetScore * sumW - otherSum) / weights[component];
+            if (required < 0 || required > 10) return { possible: false, required, msg: required < 0 ? 'Đã vượt mục tiêu' : 'Không khả thi (>10)' };
+            return { possible: true, required: Math.round(required * 100) / 100 };
+        }
+
+        function goalSeekSemesterGPA(targetGPA, currentSem, doneSems, mode, mapping) {
+            let cumCredits = 0, cumWeighted = 0;
+            for (const sem of doneSems) {
+                for (const c of sem.courses) {
+                    const res = calcCourseScore(c, mode);
+                    if (res.valid && c.credits > 0) {
+                        cumCredits += c.credits;
+                        cumWeighted += res.score * c.credits;
+                    }
+                }
+            }
+            let semCredits = 0;
+            for (const c of currentSem.courses) {
+                if (c.credits > 0) semCredits += c.credits;
+            }
+            if (semCredits === 0) return { possible: false, msg: 'Học kỳ hiện tại chưa có tín chỉ' };
+            const required = (targetGPA * (cumCredits + semCredits) - cumWeighted) / semCredits;
+            if (required < 0 || required > 10) return { possible: false, required, msg: required < 0 ? 'Đã đạt mục tiêu' : 'Không khả thi (GPA > 10)' };
+            return { possible: true, required: Math.round(required * 100) / 100, cumCredits, semCredits };
+        }
+
+        // ================= STORAGE =================
+        const STORAGE_KEY = 'gpa_calculator_pro_data';
+        function saveState() {
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn('Save failed:', e); }
+        }
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state = { ...state, ...parsed, settings: { ...state.settings, ...parsed.settings } };
+                    state.settings.mapping = [...DEFAULT_MAPPING];
+                }
+                applyTheme(state.settings.theme || 'light');
+            } catch (e) { console.warn('Load failed:', e); }
+        }
+
+        // ================= THEME SYSTEM =================
+        function applyTheme(theme) {
+            document.documentElement.className = '';
+            if (theme === 'dark') document.documentElement.classList.add('dark', 'theme-dark');
+            else if (theme !== 'light') document.documentElement.classList.add(`theme-${theme}`);
+            state.settings.theme = theme;
+            state.settings.darkMode = theme === 'dark';
+        }
+        function setTheme(theme) {
+            applyTheme(theme);
+            saveState();
+            render();
+            showToast(`Đã đổi sang theme ${theme.charAt(0).toUpperCase() + theme.slice(1)}`, 'success');
+        }
+
+        // ================= PDF EXPORT =================
+        async function exportPDF() {
+            showToast('Đang tạo PDF...', 'info');
+
+            const cumGPA = calcCumulativeGPA(state.semesters, state.settings.mode, state.settings.mapping);
+            const rank = getGraduationRank(cumGPA.gpa10);
+
+            // Create hidden HTML for PDF
+            const pdfContent = document.createElement('div');
+            pdfContent.style.cssText = 'position:absolute;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:Arial,sans-serif;color:black;';
+
+            let semestersHTML = '';
+            for (const sem of state.semesters) {
+                if (!sem.includedInCum) continue;
+                const semGPA = calcSemesterGPA(sem, state.settings.mode, state.settings.mapping);
+                semestersHTML += `
+                    <div style="margin-top:20px;">
+                        <h3 style="color:#6366f1;margin-bottom:10px;">${sem.name} (GPA: ${semGPA.gpa10})</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                            <thead><tr style="background:#6366f1;color:white;">
+                                <th style="padding:8px;border:1px solid #ddd;text-align:left;">Môn học</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:50px;">TC</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:60px;">Điểm</th>
+                                <th style="padding:8px;border:1px solid #ddd;width:70px;">Xếp loại</th>
+                            </tr></thead>
+                            <tbody>
+                                ${semGPA.courses.map((c, i) => `
+                                    <tr style="background:${i % 2 ? '#f8f9fa' : 'white'};">
+                                        <td style="padding:8px;border:1px solid #ddd;">${c.name || '(Chưa đặt tên)'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.credits}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? c.score : '-'}</td>
+                                        <td style="padding:8px;border:1px solid #ddd;text-align:center;">${c.valid ? getLetter(c.score, state.settings.mapping) : '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            pdfContent.innerHTML = `
+                <h1 style="color:#6366f1;text-align:center;margin-bottom:20px;">📊 GPA Calculator Pro - Bảng điểm</h1>
+                <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <p style="margin:5px 0;"><strong>Ngày xuất:</strong> ${new Date().toLocaleDateString('vi-VN')}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 10):</strong> ${cumGPA.gpa10}</p>
+                    <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 4):</strong> ${cumGPA.gpa4}</p>
+                    <p style="margin:5px 0;"><strong>Xếp loại:</strong> ${rank.rank} ${rank.latin ? '(' + rank.latin + ')' : ''}</p>
+                    <p style="margin:5px 0;"><strong>Tổng tín chỉ:</strong> ${cumGPA.totalCredits}</p>
+                </div>
+                ${semestersHTML}
+                <p style="margin-top:30px;font-size:12px;color:#666;text-align:center;">
+                    Xuất từ GPA Calculator Pro - ${new Date().toLocaleString('vi-VN')}
+                </p>
+            `;
+
+            document.body.appendChild(pdfContent);
+
+            try {
+                const canvas = await html2canvas(pdfContent, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                let heightLeft = pdfHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                heightLeft -= pdf.internal.pageSize.getHeight();
+
+                while (heightLeft > 0) {
+                    position = heightLeft - pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                    heightLeft -= pdf.internal.pageSize.getHeight();
+                }
+
+                pdf.save(`GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                showToast('Đã xuất PDF thành công!', 'success');
+            } catch (err) {
+                console.error('PDF Error:', err);
+                showToast('Lỗi xuất PDF: ' + err.message, 'danger');
+            } finally {
+                document.body.removeChild(pdfContent);
+            }
         }
 
         // ================= KEYBOARD SHORTCUTS =================
