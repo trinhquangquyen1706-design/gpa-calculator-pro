@@ -722,6 +722,65 @@
             .form-row {
                 grid-template-columns: repeat(2, 1fr);
             }
+
+            /* Mobile slider for score input */
+            .mobile-score-wrapper {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                width: 100%;
+            }
+
+            .mobile-score-slider {
+                width: 100%;
+                height: 8px;
+                -webkit-appearance: none;
+                appearance: none;
+                background: linear-gradient(to right, var(--danger), var(--warning), var(--success));
+                border-radius: 4px;
+                outline: none;
+            }
+
+            .mobile-score-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 20px;
+                height: 20px;
+                background: var(--accent);
+                border-radius: 50%;
+                cursor: pointer;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            }
+
+            .mobile-score-slider::-moz-range-thumb {
+                width: 20px;
+                height: 20px;
+                background: var(--accent);
+                border-radius: 50%;
+                cursor: pointer;
+                border: none;
+            }
+
+            .mobile-score-value {
+                text-align: center;
+                font-weight: 600;
+                font-size: 14px;
+                color: var(--accent);
+            }
+
+            .course-table {
+                font-size: 12px;
+            }
+
+            .course-table th,
+            .course-table td {
+                padding: 8px 4px;
+            }
+
+            .input-sm {
+                width: 50px !important;
+                font-size: 12px;
+            }
         }
 
         /* Toast Notifications */
@@ -910,6 +969,88 @@
             background: rgba(99, 102, 241, 0.1) !important;
             border-color: var(--accent) !important;
         }
+
+        /* User Profile */
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            margin-bottom: 8px;
+        }
+
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .user-avatar:hover {
+            transform: scale(1.1);
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-school {
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Import/Export Modal */
+        .import-preview {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .import-preview-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .import-preview-item:last-child {
+            border-bottom: none;
+        }
+
+        .import-warning {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid var(--warning);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
     </style>
 </head>
 
@@ -949,8 +1090,19 @@
                 gpaGoal: 8.0,
                 courseTemplates: []
             },
-            whatIfData: {}
+            whatIfData: {},
+            userProfile: {
+                name: '',
+                school: '',
+                faculty: '',
+                studentId: ''
+            }
         };
+
+        // ================= MOBILE DETECTION =================
+        function isMobile() {
+            return window.innerWidth <= 768 || 'ontouchstart' in window;
+        }
 
         // ================= GRADUATION RANKING =================
         function getGraduationRank(gpa10) {
@@ -1104,6 +1256,9 @@
                     const parsed = JSON.parse(saved);
                     state = { ...state, ...parsed, settings: { ...state.settings, ...parsed.settings } };
                     state.settings.mapping = [...DEFAULT_MAPPING];
+                    if (parsed.userProfile) {
+                        state.userProfile = { ...state.userProfile, ...parsed.userProfile };
+                    }
                 }
                 applyTheme(state.settings.theme || 'light');
             } catch (e) { console.warn('Load failed:', e); }
@@ -1164,8 +1319,20 @@
                 `;
             }
 
+            const p = state.userProfile;
+            const profileHTML = p.name ? `
+                <div style="background:#e0e7ff;padding:15px;border-radius:8px;margin-bottom:20px;">
+                    <h3 style="color:#6366f1;margin:0 0 10px 0;">👤 Thông tin sinh viên</h3>
+                    <p style="margin:5px 0;"><strong>Họ và tên:</strong> ${p.name}</p>
+                    ${p.studentId ? `<p style="margin:5px 0;"><strong>MSSV:</strong> ${p.studentId}</p>` : ''}
+                    ${p.school ? `<p style="margin:5px 0;"><strong>Trường:</strong> ${p.school}</p>` : ''}
+                    ${p.faculty ? `<p style="margin:5px 0;"><strong>Khoa/Ngành:</strong> ${p.faculty}</p>` : ''}
+                </div>
+            ` : '';
+
             pdfContent.innerHTML = `
                 <h1 style="color:#6366f1;text-align:center;margin-bottom:20px;">📊 GPA Calculator Pro - Bảng điểm</h1>
+                ${profileHTML}
                 <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin-bottom:20px;">
                     <p style="margin:5px 0;"><strong>Ngày xuất:</strong> ${new Date().toLocaleDateString('vi-VN')}</p>
                     <p style="margin:5px 0;"><strong>GPA Tích lũy (thang 10):</strong> ${cumGPA.gpa10}</p>
@@ -1202,7 +1369,10 @@
                     heightLeft -= pdf.internal.pageSize.getHeight();
                 }
 
-                pdf.save(`GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+                const pdfFileName = state.userProfile.studentId
+                    ? `GPA_${state.userProfile.studentId}_${new Date().toISOString().slice(0, 10)}.pdf`
+                    : `GPA_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+                pdf.save(pdfFileName);
                 showToast('Đã xuất PDF thành công!', 'success');
             } catch (err) {
                 console.error('PDF Error:', err);
@@ -1251,14 +1421,17 @@
         }
 
         function exportJSON() {
+            const fileName = state.userProfile.studentId
+                ? `GPA_${state.userProfile.studentId}_${new Date().toISOString().slice(0, 10)}.json`
+                : `gpa_data_${new Date().toISOString().slice(0, 10)}.json`;
             const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gpa_data_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = fileName;
             a.click();
             URL.revokeObjectURL(url);
-            showToast('Đã xuất dữ liệu JSON!', 'success');
+            showToast('Đã xuất dữ liệu thành công!', 'success');
         }
 
         function importJSON(file) {
@@ -1266,19 +1439,77 @@
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (data.semesters && Array.isArray(data.semesters)) {
-                        state = { ...state, ...data };
-                        saveState();
-                        render();
-                        alert('Import thành công!');
-                    } else {
-                        alert('File không hợp lệ!');
+                    if (!data.semesters || !Array.isArray(data.semesters)) {
+                        showToast('File không hợp lệ: Thiếu dữ liệu học kỳ!', 'danger');
+                        return;
                     }
+                    showImportConfirmModal(data);
                 } catch (err) {
-                    alert('Lỗi đọc file: ' + err.message);
+                    showToast('Lỗi đọc file: ' + err.message, 'danger');
                 }
             };
             reader.readAsText(file);
+        }
+
+        function showImportConfirmModal(data) {
+            const totalCourses = data.semesters.reduce((sum, s) => sum + s.courses.length, 0);
+            const hasProfile = data.userProfile && data.userProfile.name;
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.id = 'import-modal';
+            overlay.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">📥 Xác nhận Import</span>
+            <button class="modal-close" onclick="closeImportModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="import-warning">
+              <span>⚠️</span>
+              <span>Dữ liệu hiện tại sẽ bị ghi đè. Hãy chắc chắn bạn đã backup!</span>
+            </div>
+            <div class="import-preview">
+              <div class="import-preview-item">
+                <span>📚 Số học kỳ:</span>
+                <strong>${data.semesters.length}</strong>
+              </div>
+              <div class="import-preview-item">
+                <span>📝 Số môn học:</span>
+                <strong>${totalCourses}</strong>
+              </div>
+              ${hasProfile ? `
+              <div class="import-preview-item">
+                <span>👤 Hồ sơ:</span>
+                <strong>${data.userProfile.name}</strong>
+              </div>` : ''}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeImportModal()">Hủy</button>
+            <button class="btn btn-primary" onclick="confirmImport()">Xác nhận Import</button>
+          </div>
+        </div>`;
+            overlay.onclick = (e) => { if (e.target === overlay) closeImportModal(); };
+            document.body.appendChild(overlay);
+            window._pendingImportData = data;
+        }
+
+        function closeImportModal() {
+            document.getElementById('import-modal')?.remove();
+            window._pendingImportData = null;
+        }
+
+        function confirmImport() {
+            if (window._pendingImportData) {
+                state = { ...state, ...window._pendingImportData };
+                if (window._pendingImportData.userProfile) {
+                    state.userProfile = { ...state.userProfile, ...window._pendingImportData.userProfile };
+                }
+                saveState();
+                render();
+                showToast('Import thành công!', 'success');
+            }
+            closeImportModal();
         }
 
         // ================= HELPERS =================
@@ -1315,6 +1546,15 @@
         <span class="logo">📊</span>
         <span class="app-title">GPA Calculator Pro</span>
       </div>
+      ${state.userProfile.name ? `
+      <div class="user-profile" onclick="showProfileModal()">
+        <div class="user-avatar">${state.userProfile.name.charAt(0).toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${state.userProfile.name}</div>
+          <div class="user-school">${state.userProfile.school || state.userProfile.faculty || 'Nhấn để chỉnh sửa'}</div>
+        </div>
+      </div>` : `
+      <button class="btn btn-secondary" style="width:100%; margin-bottom: 8px;" onclick="showProfileModal()">👤 Thêm hồ sơ</button>`}
       <button class="btn btn-primary" onclick="addSemester()">+ Thêm học kỳ</button>
       <div class="semester-list">
         ${state.semesters.map(s => `
@@ -1404,10 +1644,12 @@
                 return '<div class="empty-state"><div class="icon">👈</div><div>Chọn hoặc tạo học kỳ để bắt đầu</div></div>';
             }
             const courses = semGPA ? semGPA.courses : activeSem.courses.map(c => ({ ...c, valid: true, score: 0 }));
+            const mobile = isMobile();
             return `
     <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
       <div style="display: flex; gap: 8px; align-items: center;">
         <span class="badge ${state.settings.mode === 'STRICT' ? 'badge-warning' : 'badge-success'}">${state.settings.mode === 'STRICT' ? '⚠ Strict' : '✓ Auto-Normalize'}</span>
+        ${mobile ? '<span class="badge badge-success">📱 Mobile</span>' : ''}
       </div>
       <button class="btn btn-primary" onclick="addCourse()">+ Thêm môn học</button>
     </div>
@@ -1418,15 +1660,15 @@
             <th style="width:40px">#</th>
             <th>Tên môn</th>
             <th style="width:60px">TC</th>
-            <th style="width:60px">BTL</th>
-            <th style="width:60px">Quiz</th>
-            <th style="width:60px">GK</th>
-            <th style="width:60px">CK</th>
-            <th style="width:60px">%BTL</th>
-            <th style="width:60px">%Quiz</th>
-            <th style="width:60px">%GK</th>
-            <th style="width:60px">%CK</th>
-            <th style="width:100px">Template</th>
+            <th style="width:${mobile ? '80px' : '60px'}">BTL</th>
+            <th style="width:${mobile ? '80px' : '60px'}">Quiz</th>
+            <th style="width:${mobile ? '80px' : '60px'}">GK</th>
+            <th style="width:${mobile ? '80px' : '60px'}">CK</th>
+            ${mobile ? '' : '<th style="width:60px">%BTL</th>'}
+            ${mobile ? '' : '<th style="width:60px">%Quiz</th>'}
+            ${mobile ? '' : '<th style="width:60px">%GK</th>'}
+            ${mobile ? '' : '<th style="width:60px">%CK</th>'}
+            ${mobile ? '' : '<th style="width:100px">Template</th>'}
             <th style="width:80px">Điểm</th>
             <th style="width:50px">Xếp</th>
             <th style="width:40px"></th>
@@ -1438,20 +1680,20 @@
               <td style="text-align:center">${i + 1}</td>
               <td><input type="text" class="input-name" value="${c.name}" onchange="updateCourse('${c.id}','name',this.value)"></td>
               <td><input type="number" class="input-sm" value="${c.credits}" min="1" onchange="updateCourse('${c.id}','credits',+this.value)"></td>
-              <td><input type="number" class="input-sm" value="${c.btl}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','btl',+this.value)"></td>
-              <td><input type="number" class="input-sm" value="${c.quiz}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','quiz',+this.value)"></td>
-              <td><input type="number" class="input-sm" value="${c.gk}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','gk',+this.value)"></td>
-              <td><input type="number" class="input-sm" value="${c.ck}" min="0" max="10" step="0.1" onchange="updateCourse('${c.id}','ck',+this.value)"></td>
-              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wBTL}" min="0" max="100" onchange="updateCourse('${c.id}','wBTL',+this.value)"></td>
-              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wQuiz}" min="0" max="100" onchange="updateCourse('${c.id}','wQuiz',+this.value)"></td>
-              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wGK}" min="0" max="100" onchange="updateCourse('${c.id}','wGK',+this.value)"></td>
-              <td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wCK}" min="0" max="100" onchange="updateCourse('${c.id}','wCK',+this.value)"></td>
-              <td>
+              <td>${renderScoreInput(c.id, 'btl', c.btl, mobile)}</td>
+              <td>${renderScoreInput(c.id, 'quiz', c.quiz, mobile)}</td>
+              <td>${renderScoreInput(c.id, 'gk', c.gk, mobile)}</td>
+              <td>${renderScoreInput(c.id, 'ck', c.ck, mobile)}</td>
+              ${mobile ? '' : `<td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wBTL}" min="0" max="100" onchange="updateCourse('${c.id}','wBTL',+this.value)"></td>`}
+              ${mobile ? '' : `<td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wQuiz}" min="0" max="100" onchange="updateCourse('${c.id}','wQuiz',+this.value)"></td>`}
+              ${mobile ? '' : `<td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wGK}" min="0" max="100" onchange="updateCourse('${c.id}','wGK',+this.value)"></td>`}
+              ${mobile ? '' : `<td><input type="number" class="input-sm ${!c.valid ? 'invalid' : ''}" value="${c.wCK}" min="0" max="100" onchange="updateCourse('${c.id}','wCK',+this.value)"></td>`}
+              ${mobile ? '' : `<td>
                 <select onchange="applyTemplate('${c.id}', this.value)">
                   <option value="">-- Chọn --</option>
                   ${WEIGHT_TEMPLATES.map((t, ti) => `<option value="${ti}">${t.name}</option>`).join('')}
                 </select>
-              </td>
+              </td>`}
               <td class="score-cell ${c.valid ? (c.score >= 8 ? 'high' : c.score >= 5 ? 'medium' : 'low') : ''}">
                 ${c.valid ? c.score : '-'}
                 ${c.normalized ? '<span class="badge badge-warning" title="Đã chuẩn hóa">~</span>' : ''}
@@ -1963,6 +2205,95 @@
             state.settings.gpaGoal = value;
             saveState();
             showToast(`Mục tiêu GPA đã được đặt thành ${value}`, 'success');
+        }
+
+        // ================= USER PROFILE =================
+        function showProfileModal() {
+            const p = state.userProfile;
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.id = 'profile-modal';
+            overlay.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">👤 Hồ sơ cá nhân</span>
+            <button class="modal-close" onclick="closeProfileModal()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">Họ và tên</label>
+              <input type="text" class="form-input" id="profile-name" value="${p.name}" placeholder="Nguyễn Văn A">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mã số sinh viên</label>
+              <input type="text" class="form-input" id="profile-studentId" value="${p.studentId}" placeholder="20210001">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Trường</label>
+              <input type="text" class="form-input" id="profile-school" value="${p.school}" placeholder="Đại học Bách Khoa">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Khoa / Ngành</label>
+              <input type="text" class="form-input" id="profile-faculty" value="${p.faculty}" placeholder="Điện-Điện tử">
+            </div>
+          </div>
+          <div class="modal-footer">
+            ${p.name ? '<button class="btn btn-danger" onclick="clearProfile()">Xóa hồ sơ</button>' : ''}
+            <button class="btn btn-secondary" onclick="closeProfileModal()">Hủy</button>
+            <button class="btn btn-primary" onclick="saveProfile()">Lưu</button>
+          </div>
+        </div>`;
+            overlay.onclick = (e) => { if (e.target === overlay) closeProfileModal(); };
+            document.body.appendChild(overlay);
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profile-modal')?.remove();
+        }
+
+        function saveProfile() {
+            state.userProfile.name = document.getElementById('profile-name').value.trim();
+            state.userProfile.studentId = document.getElementById('profile-studentId').value.trim();
+            state.userProfile.school = document.getElementById('profile-school').value.trim();
+            state.userProfile.faculty = document.getElementById('profile-faculty').value.trim();
+            saveState();
+            closeProfileModal();
+            render();
+            showToast('Đã lưu hồ sơ thành công!', 'success');
+        }
+
+        function clearProfile() {
+            if (confirm('Xóa hồ sơ cá nhân?')) {
+                state.userProfile = { name: '', school: '', faculty: '', studentId: '' };
+                saveState();
+                closeProfileModal();
+                render();
+                showToast('Đã xóa hồ sơ', 'info');
+            }
+        }
+
+        // ================= MOBILE SCORE SLIDER HELPER =================
+        function renderScoreInput(courseId, field, value, isMobileDevice) {
+            if (isMobileDevice) {
+                return `
+                    <div class="mobile-score-wrapper">
+                        <input type="range" class="mobile-score-slider" 
+                            value="${value}" min="0" max="10" step="0.5"
+                            oninput="updateCourseSlider('${courseId}', '${field}', this.value)"
+                            onchange="updateCourse('${courseId}', '${field}', +this.value)">
+                        <div class="mobile-score-value">${value}</div>
+                    </div>`;
+            }
+            return `<input type="number" class="input-sm" value="${value}" min="0" max="10" step="0.1" onchange="updateCourse('${courseId}','${field}',+this.value)">`;
+        }
+
+        function updateCourseSlider(courseId, field, value) {
+            // Update display value only (for live feedback)
+            const wrapper = event.target.closest('.mobile-score-wrapper');
+            if (wrapper) {
+                const display = wrapper.querySelector('.mobile-score-value');
+                if (display) display.textContent = value;
+            }
         }
 
         // ================= TESTS =================
