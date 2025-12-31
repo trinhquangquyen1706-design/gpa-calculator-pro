@@ -1,0 +1,19 @@
+{
+  "name": "GPA Calculator Pro",
+  "short_name": "GPA Pro",
+  "description": "Ứng dụng tính GPA đa học kỳ với Goal Seeking, biểu đồ, và nhiều tính năng thông minh",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "vi"
+}
